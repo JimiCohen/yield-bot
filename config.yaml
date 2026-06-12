@@ -150,12 +150,14 @@ position:
 
 # --- Anti-over-rebalancing gates (Phase 5) -------------------------------
 rebalance:
-  # PAPER-LEARNING cadence (was 60/2): 5-min checks + up to 48 recenters/day
-  # let the bot manage the tight thin-gauge plays the capital-test validated
-  # (+$187/3d realized at $400/±0.01% with ~144 recenters/day). The model is
-  # cadence-aware: tighter widths than the cadence can hold price OUT, not in.
-  # Revisit (60/2) before live if the ledger disagrees.
-  check_interval_minutes: 5
+  # Check interval: 15 min. A rigorous 2-window cadence sweep (5→120 min)
+  # showed frequent checking has a CHURN downside and no proven upside at
+  # tight widths — but couldn't pinpoint an optimum (backtest sampling noise
+  # at 5-min granularity exceeds the real effect; most cells showed 0
+  # rebalances because the gates correctly block tiny-band recenters). 15 is
+  # a defensible middle: catches real exits, cuts churn. The LIVE PAPER
+  # LEDGER is the true arbiter — not backtest micro-optimization.
+  check_interval_minutes: 15
   deadband_fraction: 0.25     # price must exceed range edge by 25% of width
   sustain_minutes: 0          # at 5-min checks the cadence IS the sustain
   net_benefit_margin: 3.0     # projected gain must be >= 3x full move cost

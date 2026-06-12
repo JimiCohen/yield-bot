@@ -83,14 +83,18 @@ export async function fetchHistory(
   store: Store,
   snapshots: PoolSnapshot[],
   aero: AeroPricing | null,
-  opts: { days: number; stepHours: number },
+  opts: { days: number; stepHours: number; endDaysAgo?: number },
   log: (msg: string) => void,
 ): Promise<History> {
   const blockNowRaw = Number(await client.getBlockNumber());
   const stepBlocks = Math.round((opts.stepHours * 3600) / BLOCK_SECONDS);
+  // endDaysAgo shifts the window's END back in time, so the same machinery
+  // can replay OLDER market regimes (for multi-window robustness checks).
+  const endShiftBlocks = Math.round(((opts.endDaysAgo ?? 0) * 86400) / BLOCK_SECONDS);
+  const anchorRaw = blockNowRaw - endShiftBlocks;
   // Grid-align the anchor so consecutive runs share sample blocks and the
   // cache actually hits (an unaligned anchor refetched everything each run).
-  const blockNow = Math.floor(blockNowRaw / stepBlocks) * stepBlocks;
+  const blockNow = Math.floor(anchorRaw / stepBlocks) * stepBlocks;
   const nowMs = Date.now() - (blockNowRaw - blockNow) * BLOCK_SECONDS * 1000;
   const nSteps = Math.floor((opts.days * 24) / opts.stepHours);
   const blocks: number[] = [];

@@ -22,7 +22,9 @@
     "capital-test": "tsx src/sim/capitalExperiment.ts",
     "pool-research": "tsx src/sim/poolResearch.ts",
     "cadence-test": "tsx src/sim/checkCadence.ts",
-    "discover": "tsx src/cli/index.ts discover"
+    "discover": "tsx src/cli/index.ts discover",
+    "strategy-table": "tsx src/sim/strategyTable.ts",
+    "cadence-sweep": "tsx src/sim/cadenceSweep.ts"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",
