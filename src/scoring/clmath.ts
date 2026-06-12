@@ -46,6 +46,43 @@ export function liquidityForUsd(p: PoolPricing, usd: number, m: number): number 
 }
 
 /**
+ * Liquidity purchasable with `usd` for an ARBITRARY band [sa, sb] at current
+ * raw sqrt price sNow — the exact inverse of positionValueUsd. Positions must
+ * size L from the band they actually deploy (tick-aligned), never from the
+ * requested width: when snapping widens/narrows the band, width-based sizing
+ * mis-states entry value by the leverage ratio (observed up to 1.83x — a
+ * $1,200 entry credited with $2,192 of tokens).
+ */
+export function liquidityForUsdInBand(
+  p: PoolPricing,
+  usd: number,
+  sa: number,
+  sb: number,
+  sNow: number,
+): number {
+  const s = Math.min(Math.max(sNow, sa), sb);
+  const perL =
+    (1 / s - 1 / sb) * (p.p0Usd / 10 ** p.dec0) + (s - sa) * (p.p1Usd / 10 ** p.dec1);
+  return perL > 0 ? usd / perL : 0;
+}
+
+/**
+ * Quantize a width multiplier to the nearest band a pool can actually mint:
+ * tick edges snap to the spacing, so deployable band widths are integer
+ * multiples of it. Scoring an unbuildable width overstates leverage — and
+ * therefore fees, emissions share AND predicted yield — by up to ~2x near
+ * one-spacing bands.
+ */
+export function quantizeWidth(m: number, tickSpacing: number): number {
+  const halfTicks = Math.log(m) / Math.log(1.0001);
+  const bandTicks = Math.max(
+    tickSpacing,
+    Math.round((2 * halfTicks) / tickSpacing) * tickSpacing,
+  );
+  return Math.pow(1.0001, bandTicks / 2);
+}
+
+/**
  * USD value of the pool's virtual reserves on each side at the current tick.
  * Used for size-aware swap impact: within the active tick a CL pool behaves
  * as constant-product on virtual reserves x = L/s (token0), y = L·s (token1).

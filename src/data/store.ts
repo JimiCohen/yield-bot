@@ -804,7 +804,7 @@ export class Store {
     this.db.prepare("UPDATE live_positions SET status = 'closed' WHERE token_id = ?").run(tokenId);
   }
 
-  getOpenLivePositions(): { tokenId: string; pool: string; pair: string; arm: string }[] {
+  getOpenLivePositions(): { tokenId: string; pool: string; pair: string; arm: string; openedTs: number }[] {
     return (
       this.db
         .prepare("SELECT * FROM live_positions WHERE status = 'open'")
@@ -814,20 +814,34 @@ export class Store {
       pool: r.pool as string,
       pair: r.pair as string,
       arm: r.arm as string,
+      openedTs: r.opened_ts as number,
     }));
   }
 
-  /** Validation stats from the paper ledger — the phase gate reads this. */
+  /** Validation stats from the paper ledger — the phase gate reads this.
+   *
+   * Hold-time weighted: realized alpha is annualized to the horizon, so a
+   * 20-minute hold gets its noise multiplied ~500x while an 8-hour hold gets
+   * ~21x. Equal-weighting let the shortest, noisiest holds dominate the
+   * accuracy score. Each entry's weight is its days_held (capped at the
+   * 7-day horizon), and per-entry ratios are clamped to ±5 so one
+   * annualization blow-up cannot drag the mean outside any band. */
   getValidationStats(): { entries: number; signAgreement: number; meanRatio: number } {
     const rows = this.db
       .prepare(
-        "SELECT predicted_net_usd_h p, realized_alpha_usd_h r FROM paper_entries",
+        "SELECT predicted_net_usd_h p, realized_alpha_usd_h r, days_held d FROM paper_entries",
       )
-      .all() as { p: number; r: number }[];
+      .all() as { p: number; r: number; d: number }[];
     if (rows.length === 0) return { entries: 0, signAgreement: 0, meanRatio: NaN };
-    const agree = rows.filter((x) => Math.sign(x.r) === Math.sign(x.p)).length / rows.length;
-    const ratios = rows.filter((x) => Math.abs(x.p) > 0.5).map((x) => x.r / x.p);
-    const meanRatio = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : NaN;
+    const w = (x: { d: number }) => Math.min(Math.max(x.d, 0.01), 7);
+    const wSum = rows.reduce((a, x) => a + w(x), 0);
+    const agree =
+      rows.reduce((a, x) => a + (Math.sign(x.r) === Math.sign(x.p) ? w(x) : 0), 0) / wSum;
+    const rated = rows.filter((x) => Math.abs(x.p) > 0.5);
+    const rwSum = rated.reduce((a, x) => a + w(x), 0);
+    const meanRatio = rated.length
+      ? rated.reduce((a, x) => a + Math.max(-5, Math.min(5, x.r / x.p)) * w(x), 0) / rwSum
+      : NaN;
     return { entries: rows.length, signAgreement: agree, meanRatio };
   }
 

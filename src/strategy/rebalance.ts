@@ -2,7 +2,8 @@ import type { Config } from "../config/schema.js";
 import type { Store } from "../data/store.js";
 import type { AuditLog } from "../audit/log.js";
 import {
-  liquidityForUsd,
+  liquidityForUsdInBand,
+  sRaw,
   swapImpactFraction,
   type PoolPricing,
 } from "../scoring/clmath.js";
@@ -184,15 +185,28 @@ export function executePaperRebalance(
   costUsd: number,
 ): { tickLower: number; tickUpper: number; widthMult: number } {
   const p = check.position;
-  const widthMult = freshScore.choice!.widthMult; // width recalculated, not reused
-  const halfWidthTicks = Math.log(widthMult) / LN_TICK;
-  const snapTick = (t: number) => Math.round(t / p.tickSpacing) * p.tickSpacing;
-  let tickLower = snapTick(snap.tick - halfWidthTicks);
-  let tickUpper = snapTick(snap.tick + halfWidthTicks);
-  if (tickUpper <= tickLower) tickUpper = tickLower + p.tickSpacing;
+  // Band first, L from the band actually deployed (see openPaperPosition —
+  // width-based sizing mis-states value whenever snapping changes the band).
+  const requested = freshScore.choice!.widthMult; // width recalculated, not reused
+  const halfWidthTicks = Math.log(requested) / LN_TICK;
+  const bandTicks = Math.max(
+    p.tickSpacing,
+    Math.round((2 * halfWidthTicks) / p.tickSpacing) * p.tickSpacing,
+  );
+  const tickLower =
+    Math.round((snap.tick - bandTicks / 2) / p.tickSpacing) * p.tickSpacing;
+  const tickUpper = tickLower + bandTicks;
+  const widthMult = Math.pow(1.0001, bandTicks / 2);
 
   const redeployUsd = Math.max(0, check.valueUsd - costUsd);
-  const newL = liquidityForUsd(pricing, redeployUsd, widthMult);
+  const sNow = sRaw(snap.sqrtPriceX96);
+  const newL = liquidityForUsdInBand(
+    pricing,
+    redeployUsd,
+    Math.pow(1.0001, tickLower / 2),
+    Math.pow(1.0001, tickUpper / 2),
+    sNow,
+  );
 
   store.applyPaperRebalance(p.id, {
     tickLower,

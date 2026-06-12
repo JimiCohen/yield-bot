@@ -479,7 +479,7 @@ async function cmdMonitor(configPath: string, args: string[]) {
       // 5. SWITCH evaluation (Phase 6) — only for held positions.
       const sw = evaluateSwitch(
         cfg,
-        { pool: p.pool, pair: p.pair, valueUsd: c.valueUsd },
+        { pool: p.pool, pair: p.pair, valueUsd: c.valueUsd, ageMs: Date.now() - p.openedTs },
         freshScore, viableScores(scores, cfg), pricingForScore, pricing, snap, gas,
       );
       audit.record("switch_decision", p.pool, sw.action.toUpperCase(), {

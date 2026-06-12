@@ -1,7 +1,33 @@
 # Project Status — read me first in any new session
 
-_Last updated: 2026-06-12. This file is the single source of truth for
-"where are we" — update it whenever something material changes._
+_Last updated: 2026-06-12 (evening — accounting-bug fix sprint). This file is
+the single source of truth for "where are we" — update it whenever something
+material changes._
+
+## LATEST: the 20–23% "accuracy" was a measurement bug, now fixed
+Diagnosis of the ledger found THREE defects that made validation garbage-in:
+1. **Snap-band phantom P&L** (the big one): `openPaperPosition` sized
+   liquidity from the REQUESTED width, then snapped the tick band — when
+   snapping widened the band (ts50/ts100 pools), the position was credited
+   with up to 1.83x phantom capital. The "+$992.83 in 16 minutes" trade was
+   exactly $1,200 × 1.825 at exit. Trade 13's −$46 was the same bug in the
+   narrow direction. FIX: band first (deterministic width = multiple of
+   spacing, centered), then `liquidityForUsdInBand` (exact inverse of
+   `positionValueUsd`). Same fix in `executePaperRebalance`.
+2. **Switch churn**: `evaluateSwitch` had no min-hold — bot hopped pools
+   every 15-min cycle (5 switches in one afternoon, 5–16 min holds).
+   FIX: min_hold_minutes gate in evaluateSwitch + ageMs wired from both
+   callers; live rebalance check also now passes ageMs.
+3. **Unbuildable widths scored**: optimizer width grid wasn't quantized to
+   tick spacing — leverage (and predicted yield) inflated ~2x near
+   one-spacing bands (the $525/wk siren that lured the bad switch).
+   FIX: `quantizeWidth` in clmath, applied to the grid. SOL/USDC "1,313%
+   APR" became 24% after the fix; top pick now WETH/cbBTC ts100 at ~60%.
+Validation stats are now HOLD-TIME WEIGHTED (weight = days_held, capped at
+horizon; per-entry ratio clamped ±5) in BOTH store.getValidationStats and
+server validationStats — keep them mirrored.
+The 13 pre-fix ledger rows were measured with a broken ruler → moved to
+`paper_entries_quarantined` (audit trail kept). Ledger restarts at 0/8.
 
 ## What this is
 An automated DeFi yield bot for Aerodrome (Base) + Velodrome (Optimism)
@@ -25,22 +51,27 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
   no secrets; push needs `gh auth setup-git` once per machine).
 
 ## The one number that gates everything
-**Validation: 10 paper trades, 20% prediction accuracy (needs 70%),
-realized P&L −$3.81 local / +$0.39 cloud. REAL MONEY IS LOCKED — correctly.**
+**Validation: 0 of 8 paper trades (clean restart after the accounting fix,
+2026-06-12 ~21:20 UTC). REAL MONEY IS LOCKED — correctly.**
 The `live` command + dashboard enforce this in code. Do NOT weaken the gate;
-fix the model until the ledger passes.
+let the clean ledger accumulate. With 2h min-hold now enforced everywhere,
+expect ~1–3 entries/day, so the 8-entry minimum lands in roughly 3–7 days.
 
 ## Most likely next work (in value order)
-1. **Diagnose the 20% accuracy.** The ledger (paper_entries) now has enough
-   rows. Prime suspect: predicted NEY on short holds (alpha/7d scaling
-   amplifies noise on 1–2h holds — consider min-hold-aware validation or
-   longer holds); second suspect: sub-cadence in-range fraction on ts1
-   pools (model assumes GBM ~1%, replay measured ~30%).
-2. Auto-tuning loop: use ledger outcomes to adjust fee_persistence /
+1. **Watch the clean ledger fill.** Local paper restarted on fixed code
+   (dashboard PID via `npm run dashboard`, AUTO_START_PAPER=1). When 8+
+   entries exist, check the honest accuracy number before anything else.
+2. **Update the VPS** (it still runs pre-fix code and its ledger has the
+   same corruption): hPanel web terminal → `cd yield-bot && git pull &&
+   docker compose -f docker-compose.paper.yml up -d --build`, then quarantine
+   its paper_entries the same way (see paper_entries_quarantined locally).
+3. Auto-tuning loop: use ledger outcomes to adjust fee_persistence /
    vol floors / entry bar automatically.
-3. Velodrome paper loop on the VPS too (second container with
+4. Velodrome paper loop on the VPS too (second container with
    `--config config.velodrome.yaml`).
-4. When gate passes → GO-LIVE.md runbook ($200–500 first).
+5. When gate passes → GO-LIVE.md runbook ($200–500 first).
+6. treefi.xyz TLS still unresolved (cert never issued; suspect empty
+   DASH_DOMAIN in /root/yield-bot/.env — verify with `cat .env` on VPS).
 
 ## Hard-won lessons (do not relearn these)
 - `.gitignore` dir patterns without leading slash match at EVERY depth —

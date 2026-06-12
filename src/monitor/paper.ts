@@ -4,7 +4,7 @@ import type { Config } from "../config/schema.js";
 import type { Store, PaperPositionRow } from "../data/store.js";
 import type { AuditLog } from "../audit/log.js";
 import {
-  liquidityForUsd,
+  liquidityForUsdInBand,
   positionValueUsd,
   sRaw,
   swapImpactFraction,
@@ -74,17 +74,23 @@ export function openPaperPosition(
   const entryCost = gasUsd + swapCost;
   const deployed = top.positionUsd - entryCost;
 
-  const L = liquidityForUsd(pricing, deployed, choice.widthMult);
-  const sNow = sRaw(s.sqrtPriceX96);
-
-  // Snap band to tick spacing (live execution must; paper mirrors it).
+  // Band FIRST (tick-aligned, deterministic width), then L from the band
+  // actually deployed. Sizing L from the requested width while storing the
+  // snapped band credited positions with phantom capital whenever the two
+  // diverged (up to 1.83x — the fake "+$992 in 16 minutes" ledger entry).
   const halfWidthTicks = Math.log(choice.widthMult) / LN_TICK;
-  const snap = (t: number) => Math.round(t / s.tickSpacing) * s.tickSpacing;
-  let tickLower = snap(s.tick - halfWidthTicks);
-  let tickUpper = snap(s.tick + halfWidthTicks);
-  if (tickUpper <= tickLower) tickUpper = tickLower + s.tickSpacing;
+  const bandTicks = Math.max(
+    s.tickSpacing,
+    Math.round((2 * halfWidthTicks) / s.tickSpacing) * s.tickSpacing,
+  );
+  const tickLower =
+    Math.round((s.tick - bandTicks / 2) / s.tickSpacing) * s.tickSpacing;
+  const tickUpper = tickLower + bandTicks;
   const sa = tickToSqrtRaw(tickLower);
   const sb = tickToSqrtRaw(tickUpper);
+  const sNow = sRaw(s.sqrtPriceX96);
+  const L = liquidityForUsdInBand(pricing, deployed, sa, sb, sNow);
+  const effWidthMult = Math.pow(1.0001, bandTicks / 2);
 
   const id = store.openPaperPosition({
     openedTs: Date.now(),
@@ -93,7 +99,7 @@ export function openPaperPosition(
     pair: s.pair,
     tickSpacing: s.tickSpacing,
     arm: choice.arm,
-    widthMult: choice.widthMult,
+    widthMult: effWidthMult, // the width actually deployed, not the requested one
     tickLower,
     tickUpper,
     liquidity: L,
@@ -111,7 +117,7 @@ export function openPaperPosition(
     id,
     pair: s.pair,
     arm: choice.arm,
-    widthMult: choice.widthMult,
+    widthMult: effWidthMult,
     tickLower,
     tickUpper,
     positionUsd: top.positionUsd,

@@ -4,6 +4,7 @@ import {
   leverage,
   liquidityForUsd,
   minWidthForSpacing,
+  quantizeWidth,
   swapImpactFraction,
   type PoolPricing,
 } from "./clmath.js";
@@ -106,13 +107,18 @@ export function optimizeWidth(inp: OptimizeInput): WidthChoice | null {
   if (mMin >= g.max_mult) return null;
   // Geometric in LOG-width: spacing geometric in m itself left the entire
   // ±0.01%..±1% region with one sample point and skipped the profitable
-  // tight band on thin-gauge pools entirely.
-  const widths: number[] = [];
+  // tight band on thin-gauge pools entirely. Each grid point is then
+  // quantized to a band the pool can actually mint (integer multiples of
+  // the tick spacing) — scoring unbuildable widths inflated leverage and
+  // lured switches into positions whose realized band was ~2x wider.
+  const widthSet = new Set<number>();
   const lnMin = Math.log(mMin);
   const lnMax = Math.log(g.max_mult);
   for (let i = 0; i < g.steps; i++) {
-    widths.push(Math.exp(lnMin * Math.pow(lnMax / lnMin, i / (g.steps - 1))));
+    const raw = Math.exp(lnMin * Math.pow(lnMax / lnMin, i / (g.steps - 1)));
+    widthSet.add(quantizeWidth(raw, inp.tickSpacing));
   }
+  const widths = [...widthSet];
 
   const swapFraction = inp.pairHasUsdc ? 0.5 : 1.0;
   const swapCost = (amountUsd: number) =>

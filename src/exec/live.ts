@@ -177,7 +177,7 @@ export async function runLiveCycle(
     }
 
     // 1–4. rebalance gates
-    const check = { inRange, beyondDeadband, valueUsd };
+    const check = { inRange, beyondDeadband, valueUsd, ageMs: Date.now() - lp.openedTs };
     const decision = evaluateRebalance(cfg, store, key, check, freshScore, snap, pricing, gas);
     audit.record("rebalance_decision", lp.pool, decision.action.toUpperCase(), {
       live: lp.tokenId, reasons: decision.reasons,
@@ -208,8 +208,8 @@ export async function runLiveCycle(
 
     // 5. switch
     const sw = evaluateSwitch(
-      cfg, { pool: lp.pool, pair: lp.pair, valueUsd }, freshScore, viable,
-      pricingForScore, pricing, snap, gas,
+      cfg, { pool: lp.pool, pair: lp.pair, valueUsd, ageMs: Date.now() - lp.openedTs },
+      freshScore, viable, pricingForScore, pricing, snap, gas,
     );
     if (sw.action === "switch") {
       const st = await runExit(lp.tokenId, lp.pool, PERIPHERY[snap.factory.toLowerCase()]!.positionManager, lp.pair, snap.gauge, snap.token0, snap.token1, sw.reasons.join("; "));

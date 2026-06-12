@@ -42,7 +42,7 @@ function swapLegCostUsd(
 
 export function evaluateSwitch(
   cfg: Config,
-  current: { pool: string; pair: string; valueUsd: number },
+  current: { pool: string; pair: string; valueUsd: number; ageMs?: number },
   currentScore: PoolScore | null,
   candidates: PoolScore[], // viable, sorted by NEY desc
   pricingFor: (s: PoolScore) => PoolPricing | null,
@@ -50,6 +50,24 @@ export function evaluateSwitch(
   currentSnap: PoolSnapshot,
   gas: { gasPriceWei: bigint; ethUsd: number },
 ): SwitchDecision {
+  // Same min-hold the rebalance gates enforce. Without it the bot hopped
+  // pools every check cycle chasing score noise — 5 switches in one
+  // afternoon, paying the round trip each time and never holding long
+  // enough to collect the emissions the score was promising.
+  if (
+    current.ageMs !== undefined &&
+    current.ageMs < cfg.rebalance.min_hold_minutes * 60_000
+  ) {
+    return {
+      action: "stay",
+      target: null,
+      advantageUsdH: null,
+      roundTripCostUsd: null,
+      reasons: [
+        `MIN_HOLD (held ${(current.ageMs / 60_000).toFixed(0)}min < ${cfg.rebalance.min_hold_minutes}min)`,
+      ],
+    };
+  }
   const best = candidates.find(
     (s) => s.snapshot.pool.toLowerCase() !== current.pool.toLowerCase(),
   );

@@ -157,16 +157,24 @@ function q<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T[] 
 }
 
 function validationStats() {
-  const rows = q<{ p: number; r: number }>(
-    "SELECT predicted_net_usd_h p, realized_alpha_usd_h r FROM paper_entries",
+  // Must mirror Store.getValidationStats (the gate the live command enforces):
+  // hold-time weighted, per-entry ratio clamped to ±5 — see store.ts.
+  const rows = q<{ p: number; r: number; d: number }>(
+    "SELECT predicted_net_usd_h p, realized_alpha_usd_h r, days_held d FROM paper_entries",
   );
   const e = cfg.execution;
   if (rows.length === 0) {
     return { entries: 0, signAgreement: null, meanRatio: null, thresholds: e, passed: false };
   }
-  const agree = rows.filter((x) => Math.sign(x.r) === Math.sign(x.p)).length / rows.length;
-  const ratios = rows.filter((x) => Math.abs(x.p) > 0.5).map((x) => x.r / x.p);
-  const meanRatio = ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null;
+  const w = (x: { d: number }) => Math.min(Math.max(x.d, 0.01), 7);
+  const wSum = rows.reduce((a, x) => a + w(x), 0);
+  const agree =
+    rows.reduce((a, x) => a + (Math.sign(x.r) === Math.sign(x.p) ? w(x) : 0), 0) / wSum;
+  const rated = rows.filter((x) => Math.abs(x.p) > 0.5);
+  const rwSum = rated.reduce((a, x) => a + w(x), 0);
+  const meanRatio = rated.length
+    ? rated.reduce((a, x) => a + Math.max(-5, Math.min(5, x.r / x.p)) * w(x), 0) / rwSum
+    : null;
   const passed =
     rows.length >= e.validation_min_entries &&
     agree >= e.validation_min_sign_agreement &&
