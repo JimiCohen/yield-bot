@@ -1,7 +1,10 @@
 node_modules/
 dist/
-data/
-logs/
+# Root-anchored (leading slash) so these runtime dirs are ignored but the
+# SOURCE dirs src/data/ and src/... are NOT. Without the slash, `data/`
+# also matched src/data/ and silently excluded it from the repo.
+/data/
+/logs/
 .env
 *.log
 
