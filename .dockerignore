@@ -1,0 +1,7 @@
+node_modules
+data
+logs
+dist
+.claude
+*.log
+Aerodrome Dashboard.command

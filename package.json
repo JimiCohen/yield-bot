@@ -1,0 +1,39 @@
+{
+  "name": "aerodrome-yield-bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "scan": "tsx src/cli/index.ts scan",
+    "score": "tsx src/cli/index.ts score",
+    "backtest": "tsx src/cli/index.ts backtest",
+    "monitor": "tsx src/cli/index.ts monitor",
+    "paper-open": "tsx src/cli/index.ts paper-open",
+    "paper-close": "tsx src/cli/index.ts paper-close",
+    "live": "tsx src/cli/index.ts live",
+    "dashboard": "tsx src/server/index.ts",
+    "freq-test": "tsx src/sim/freqExperiment.ts",
+    "naive-test": "tsx src/sim/naiveExperiment.ts",
+    "capital-test": "tsx src/sim/capitalExperiment.ts",
+    "pool-research": "tsx src/sim/poolResearch.ts",
+    "cadence-test": "tsx src/sim/checkCadence.ts",
+    "discover": "tsx src/cli/index.ts discover"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "viem": "^2.21.0",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

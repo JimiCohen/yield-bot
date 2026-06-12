@@ -1,0 +1,38 @@
+# Cloud deployment: bot+dashboard behind Caddy (HTTPS + basic auth).
+# The dashboard port is NEVER published — only Caddy is reachable.
+# See DEPLOY.md for the full runbook.
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Auth for the dashboard lives in Caddy; this only allows the
+      # compose-private bind (see src/server/index.ts).
+      DASHBOARD_UNSAFE_BIND: behind-my-own-proxy
+      # Secrets come from .env (never commit it):
+      BOT_PRIVATE_KEY: ${BOT_PRIVATE_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+    volumes:
+      - bot-data:/app/data
+      - bot-logs:/app/logs
+    # no ports: — unreachable except through caddy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    environment:
+      DASH_DOMAIN: ${DASH_DOMAIN:?set DASH_DOMAIN in .env}
+      DASH_USER: ${DASH_USER:?set DASH_USER in .env}
+      DASH_PASS_HASH: ${DASH_PASS_HASH:?set DASH_PASS_HASH in .env (caddy hash-password)}
+
+volumes:
+  bot-data:
+  bot-logs:
+  caddy-data:

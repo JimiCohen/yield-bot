@@ -1,0 +1,212 @@
+# ============================================================================
+# Aerodrome Yield Bot — configuration
+#
+# Every tunable lives here. No magic numbers in code.
+# Secrets are NEVER stored in this file — only env var *names* are referenced.
+# ============================================================================
+
+# Execution mode. "paper" = live data, shadow portfolio, zero transactions.
+# "live" additionally requires the --live CLI flag (two-key safety).
+mode: paper
+
+# All yield, cost, IL, and slippage comparisons are normalized to this asset.
+numeraire: USDC
+
+# Total capital the bot manages, in numeraire units. Drives slippage modeling,
+# range-width optimization (fixed-cost amortization) and position sizing.
+# PAPER value sized to the researched portfolio plan (~$400 cbBTC pocket +
+# ~$1,000 SOL pocket + reserve); set to your real deposit before going live.
+capital_usdc: 1500
+
+chain:
+  id: 8453 # Base mainnet
+  # Ordered list; the client fails over down the list. Public endpoints are
+  # rate-limited — swap in a paid/archive endpoint for backtesting (Phase 3).
+  rpc_urls:
+    - https://mainnet.base.org
+    - https://base.drpc.org
+    - https://1rpc.io/base
+    - https://base.meowrpc.com
+
+# --- Asset allowlist (hard filter) --------------------------------------
+# Only pools whose BOTH tokens appear here are ever considered.
+# cbBTC chosen over WBTC: canonical, deepest BTC on Base. WBTC on Base is
+# bridged and thin. Extend deliberately, not casually.
+allowlist:
+  tokens:
+    WETH:
+      address: "0x4200000000000000000000000000000000000006"
+      decimals: 18
+    USDC:
+      address: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      decimals: 6
+    cbBTC:
+      address: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
+      decimals: 8
+    # Wrapped Solana on Base ("Solana", 9 decimals). Added 2026-06-11 per
+    # the original spec's "SOL if a credible Base route exists": its
+    # SOL/USDC pool carries a live gauge at ~3.3k AERO/day. Bridge-trust
+    # assumptions differ from cbBTC — keep the per-pool cap tight.
+    SOL:
+      address: "0x311935Cd80B76769bF2ecC9D8Ab7635b2139cf82"
+      decimals: 9
+  # Blue-chip pairs to scan (symbol pairs; order irrelevant).
+  pairs:
+    - [WETH, USDC]
+    - [cbBTC, USDC]
+    - [WETH, cbBTC]
+    - [SOL, USDC]
+
+# --- Hard filters (a pool must pass ALL of these) ------------------------
+filters:
+  min_tvl_usdc: 100000
+  # Gauge must exist and be alive on the Voter. A killed gauge is the
+  # on-chain signal for deprecated / migrating pools (no more emissions).
+  require_alive_gauge: true
+
+scanner:
+  # Slipstream tick spacings to probe per pair. Probing a spacing that was
+  # never deployed is harmless (factory returns the zero address).
+  tick_spacings: [1, 10, 50, 100, 200, 2000]
+
+# --- Scoring (Phase 2 — values used by the Net Expected Yield engine) ----
+scoring:
+  horizon_days: 7          # cost-amortization horizon (your minimum)
+  confidence_fee: 0.9      # fee yield: denominated in pair assets, high conf
+  # Trailing fee rates mean-revert hard; projecting yesterday's rate over a
+  # week overestimated fees ~3x in backtesting. Measured rate is scaled by
+  # this before projection. Re-fit against backtest as data accumulates.
+  fee_persistence: 0.5
+  confidence_emissions: 0.7 # emission yield: AERO-denominated, low conf
+  emission_haircut: 0.15   # flat haircut on realizable AERO value
+  emission_decay_30d: 0.10 # assumed AERO price erosion per 30d, conservative
+  # Never enter below this net APR (%). Marginal positive predictions are
+  # noise at this capital scale — entering on them is donation to gas+LVR.
+  # PAPER-LEARNING setting (8): generates ledger entries faster; the
+  # validation gate referees whether predictions track reality. Revisit
+  # (e.g. 15) before flipping mode to live.
+  min_net_yield_apr: 8.0
+  # If an advisory APY exceeds outlier_ratio x what on-chain data supports,
+  # the pool is flagged unreconciled and excluded from allocation.
+  outlier_ratio: 2.0
+  # Range-width search grid (price multiplier m: range = [P/m, P*m]).
+  # Per-pool minimum width is raised to one tick spacing automatically.
+  # min_mult 1.0001 (±0.01%) lets the optimizer evaluate single-tick plays
+  # on tick-spacing-1 pools — capital-test showed real (small-capital) edge
+  # there that a ±0.5% floor was structurally blind to.
+  width_grid:
+    min_mult: 1.0001
+    max_mult: 2.0
+    steps: 64
+
+volatility:
+  ewma_lambda: 0.94
+  # Per-pair vol PRIOR: acts as both the no-data fallback and a floor under
+  # short-window measurements (vol clusters; calm readings precede
+  # expansion). PAPER-LEARNING values, measurement-informed (measured today:
+  # WETH/USDC ~34%, USDC/cbBTC ~88%, WETH/cbBTC ~18%); the original
+  # conservative guesses were 0.60/0.50/0.30. If paper alpha lags
+  # predictions, raise these before considering live.
+  fallback_annual:
+    WETH/USDC: 0.45
+    USDC/cbBTC: 0.45
+    WETH/cbBTC: 0.20   # correlated pair: relative-price vol is much lower
+  fallback_default: 0.50
+
+# --- Backtest / simulation (Phase 3) --------------------------------------
+backtest:
+  days: 14        # window length; limited by how deep the RPC serves state
+  step_hours: 2   # sample granularity (>= rebalance sustain window)
+
+# --- Live-execution gate (Phase 8) -----------------------------------------
+# The bot REFUSES to run live until the paper predicted-vs-realized ledger
+# clears these thresholds. Disabling require_validation is possible but you
+# are then explicitly choosing to run an unvalidated model with real funds.
+execution:
+  require_validation: true
+  validation_min_entries: 8
+  validation_min_sign_agreement: 0.7
+  validation_ratio_min: 0.4
+  validation_ratio_max: 2.5
+
+gas:
+  # Gas unit estimates per composite action (sum of underlying txs),
+  # priced live via eth_gasPrice and the scanned ETH price.
+  enter_gas_units: 900000      # approve + swap + mint + stake
+  exit_gas_units: 700000       # unstake + decrease + collect + swap
+  rebalance_gas_units: 1500000 # unstake + decrease + collect + swap + mint + stake
+  compound_gas_units: 600000   # claim + swap + increaseLiquidity (+re-stake)
+
+# --- Position sizing ------------------------------------------------------
+# Position SIZE is now an optimizer output (chosen jointly with width, up to
+# the budget = capital x max_pool_fraction). On thin-gauge pools the optimum
+# is interior: emissions share saturates while LVR scales with size —
+# capital-test on real data showed +$187/3d at $400 vs -$881/3d at $5k on
+# the same pool/width.
+position:
+  max_pool_fraction: 0.80  # PAPER-LEARNING (was 0.40); budget ceiling per pool
+  min_position_usd: 50     # size-grid floor (fixed costs priced by the model)
+  max_positions: 3         # simultaneous pools (the rotation portfolio)
+
+# --- Anti-over-rebalancing gates (Phase 5) -------------------------------
+rebalance:
+  # PAPER-LEARNING cadence (was 60/2): 5-min checks + up to 48 recenters/day
+  # let the bot manage the tight thin-gauge plays the capital-test validated
+  # (+$187/3d realized at $400/±0.01% with ~144 recenters/day). The model is
+  # cadence-aware: tighter widths than the cadence can hold price OUT, not in.
+  # Revisit (60/2) before live if the ledger disagrees.
+  check_interval_minutes: 5
+  deadband_fraction: 0.25     # price must exceed range edge by 25% of width
+  sustain_minutes: 0          # at 5-min checks the cadence IS the sustain
+  net_benefit_margin: 3.0     # projected gain must be >= 3x full move cost
+  min_hold_minutes: 120       # no exit/switch before this age (risk bypasses)
+  switch_margin: 4.0          # pool switches need a stricter margin
+  max_rebalances_per_day: 48
+  timing_jitter_minutes: 1    # never fire on an exactly predictable schedule
+
+# --- Execution slippage caps (Phase 8) -----------------------------------
+slippage:
+  swap_cap_bps: 30        # hard minOut bound on any swap
+  liquidity_cap_bps: 50   # hard bound on mint/burn amounts vs quote
+
+# --- Emission compounding (auto-compound, threshold-gated) ---------------
+compound:
+  # Only compound when pending AERO (realizable, in USDC) is at least this
+  # multiple of the estimated total compounding cost (gas + swap fees).
+  min_cost_multiple: 10
+
+# --- Risk / exit triggers (Phase 7) --------------------------------------
+risk:
+  usdc_depeg_exit: 0.99      # exit-fast posture below this USDC price
+  cbbtc_basis_exit_bps: 100  # cbBTC vs BTC reference basis exit trigger
+  tvl_collapse_fraction: 0.5 # exit if pool TVL halves within window
+  tvl_collapse_window_hours: 24
+  vol_spike_multiple: 3.0    # exit if measured vol > 3x the config prior
+
+# --- Wallet (Phase 8; unused in paper mode) -------------------------------
+wallet:
+  # Private key is read from this env var at runtime. Never stored on disk.
+  # Use a dedicated wallet funded ONLY with managed capital.
+  private_key_env: BOT_PRIVATE_KEY
+  # Address-only env var for read-only monitoring (no key material needed).
+  address_env: BOT_ADDRESS
+
+# --- Alerts ----------------------------------------------------------------
+alerts:
+  telegram:
+    enabled: false
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+
+# --- Persistence -----------------------------------------------------------
+db:
+  path: ./data/bot.db
+audit:
+  jsonl_path: ./logs/decisions.jsonl
+
+# --- Dashboard server -------------------------------------------------------
+# Localhost ONLY: the dashboard can start live trading. Do not bind 0.0.0.0
+# unless you put authenticated infrastructure in front of it.
+server:
+  host: 127.0.0.1
+  port: 8787

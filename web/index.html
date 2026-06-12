@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Yield Bot</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Top bar: identity + the one number that matters + the master switch -->
+  <header>
+    <div class="brand">
+      <span class="dot" id="run-dot"></span>
+      <div>
+        <h1>Yield Bot</h1>
+        <span class="muted" id="venue">—</span>
+      </div>
+    </div>
+    <div class="headline">
+      <div class="metric">
+        <span class="metric-label">Money working</span>
+        <span class="metric-value" id="m-deployed">—</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Earned so far (paper)</span>
+        <span class="metric-value" id="m-earned">—</span>
+      </div>
+      <div class="metric">
+        <span class="metric-label">Mode</span>
+        <span class="metric-value" id="m-mode">—</span>
+      </div>
+    </div>
+    <div class="master">
+      <button id="auto-toggle" class="big">Start auto-trading</button>
+      <span class="muted tiny" id="auto-hint"></span>
+    </div>
+  </header>
+
+  <!-- Trust banner: can this go live yet, in plain words -->
+  <section id="gate-banner" class="banner"></section>
+
+  <main>
+    <!-- THE MONEY MAP — opportunities, front and center -->
+    <section class="block">
+      <div class="block-head">
+        <h2>Best opportunities right now</h2>
+        <span class="muted" id="opp-sub">Ranked by real profit after all costs</span>
+      </div>
+      <div id="opps" class="opp-grid"></div>
+    </section>
+
+    <!-- What you currently hold -->
+    <section class="block">
+      <div class="block-head"><h2>Your positions</h2></div>
+      <div id="positions" class="pos-grid"></div>
+    </section>
+
+    <!-- Forecast -->
+    <section class="block">
+      <div class="block-head"><h2>If you ran the top strategies for…</h2></div>
+      <div id="forecast" class="forecast-row"></div>
+      <p class="muted tiny" id="forecast-note"></p>
+    </section>
+
+    <!-- Everything technical, hidden by default -->
+    <details class="advanced">
+      <summary>Advanced — diagnostics, backtest, logs</summary>
+      <div class="adv-controls">
+        <button id="bt-run">Run 14-day backtest</button>
+        <button id="paper-stop" class="ghost">Pause auto-trading</button>
+        <span class="muted tiny" id="adv-state"></span>
+      </div>
+      <h3>Model validation (must pass before live)</h3>
+      <div id="validation"></div>
+      <h3>Recent activity</h3>
+      <div id="decisions" class="feed"></div>
+      <h3>Logs</h3>
+      <pre id="logs" class="logs"></pre>
+    </details>
+  </main>
+
+  <!-- Confirm dialog (click-only; nothing typed) -->
+  <div id="confirm" class="overlay" hidden>
+    <div class="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-body" class="muted"></p>
+      <div class="dialog-btns">
+        <button id="confirm-cancel" class="ghost">Cancel</button>
+        <button id="confirm-ok" class="primary">Confirm</button>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

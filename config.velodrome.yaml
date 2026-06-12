@@ -1,0 +1,146 @@
+# ============================================================================
+# VELODROME (Optimism) venue config — run any command with:
+#   npm run scan -- --config config.velodrome.yaml
+# Same audited contract lineage as Aerodrome (Spearbit-reviewed Velodrome V2
+# + Slipstream). Separate database/ledger so venues validate independently.
+# ============================================================================
+
+mode: paper
+numeraire: USDC
+capital_usdc: 1500
+
+chain:
+  id: 10 # Optimism
+  rpc_urls:
+    - https://mainnet.optimism.io
+    - https://optimism.drpc.org
+    - https://1rpc.io/op
+
+# Velodrome protocol addresses (from velodrome-finance/slipstream repo;
+# routers/NPMs are re-verified on-chain at every live startup).
+protocol:
+  cl_factories:
+    - "0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F" # original Slipstream
+    - "0xe13Dd1fbA721Aa81a1826D9523AC9BC7d260c879" # Gauges V2
+  voter: "0x41C914ee0c7E1A5edCD0295623e6dC557B5aBf3C"
+  emission_token:
+    address: "0x9560e827aF36c94D2Ac33a39bCE1Fe78631088Db" # VELO
+    symbol: VELO
+    decimals: 18
+  periphery:
+    "0xCc0bDDB707055e04e497aB22a59c2aF4391cd12F":
+      swap_router: "0x0792a633F0c19c351081CF4B211F68F79bCc9676"
+      position_manager: "0x416b433906b1B72FA758e166e239c43d68dC6F29"
+    "0xe13Dd1fbA721Aa81a1826D9523AC9BC7d260c879":
+      swap_router: "0xbA3aEe516399388C779463183d00bB579f5041Ca"
+      position_manager: "0xf7f8ccce99Ca2896eC75D3A399D152dB96808399"
+
+allowlist:
+  tokens:
+    WETH:
+      address: "0x4200000000000000000000000000000000000006"
+      decimals: 18
+    USDC:
+      address: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85" # native USDC on OP
+      decimals: 6
+    WBTC:
+      address: "0x68f180fcCe6836688e9084f035309E29Bf0A2095"
+      decimals: 8
+  pairs:
+    - [WETH, USDC]
+    - [WBTC, USDC]
+    - [WETH, WBTC]
+
+filters:
+  min_tvl_usdc: 50000 # OP pockets run smaller than Base
+  require_alive_gauge: true
+
+scanner:
+  tick_spacings: [1, 10, 50, 100, 200, 2000]
+
+scoring:
+  horizon_days: 7
+  confidence_fee: 0.9
+  fee_persistence: 0.5
+  confidence_emissions: 0.7
+  emission_haircut: 0.15
+  emission_decay_30d: 0.10
+  min_net_yield_apr: 8.0
+  outlier_ratio: 2.0
+  width_grid:
+    min_mult: 1.0001
+    max_mult: 2.0
+    steps: 64
+
+volatility:
+  ewma_lambda: 0.94
+  fallback_annual:
+    USDC/WETH: 0.45
+    USDC/WBTC: 0.45
+    WETH/WBTC: 0.20
+  fallback_default: 0.50
+
+backtest:
+  days: 14
+  step_hours: 2
+
+execution:
+  require_validation: true
+  validation_min_entries: 8
+  validation_min_sign_agreement: 0.7
+  validation_ratio_min: 0.4
+  validation_ratio_max: 2.5
+
+position:
+  max_pool_fraction: 0.80
+  min_position_usd: 50
+  max_positions: 3
+
+rebalance:
+  check_interval_minutes: 5
+  deadband_fraction: 0.25
+  sustain_minutes: 0
+  net_benefit_margin: 3.0
+  min_hold_minutes: 120
+  switch_margin: 4.0
+  max_rebalances_per_day: 48
+  timing_jitter_minutes: 1
+
+slippage:
+  swap_cap_bps: 30
+  liquidity_cap_bps: 50
+
+compound:
+  min_cost_multiple: 10
+
+risk:
+  usdc_depeg_exit: 0.99
+  cbbtc_basis_exit_bps: 100
+  tvl_collapse_fraction: 0.5
+  tvl_collapse_window_hours: 24
+  vol_spike_multiple: 3.0
+
+gas:
+  enter_gas_units: 900000
+  exit_gas_units: 700000
+  rebalance_gas_units: 1500000
+  compound_gas_units: 600000
+
+wallet:
+  private_key_env: BOT_PRIVATE_KEY_OP
+  address_env: BOT_ADDRESS_OP
+
+alerts:
+  telegram:
+    enabled: false
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
+
+db:
+  path: ./data/velodrome.db
+audit:
+  jsonl_path: ./logs/velodrome-decisions.jsonl
+
+server:
+  host: 127.0.0.1
+  port: 8788

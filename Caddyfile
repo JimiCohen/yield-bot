@@ -1,0 +1,7 @@
+# HTTPS (automatic via Let's Encrypt) + basic auth in front of the dashboard.
+{$DASH_DOMAIN} {
+	basic_auth {
+		{$DASH_USER} {$DASH_PASS_HASH}
+	}
+	reverse_proxy bot:8787
+}
