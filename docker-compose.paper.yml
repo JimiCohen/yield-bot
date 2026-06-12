@@ -1,0 +1,27 @@
+# PAPER-mode cloud deployment — simplest possible.
+# No domain, no HTTPS, no real money. The bot runs 24/7 in paper mode
+# (AUTO_START_PAPER=1 in the Dockerfile) building the validation track record.
+# View the dashboard via an SSH tunnel (the tunnel is your authentication):
+#   ssh -L 8787:localhost:8787 root@YOUR_SERVER_IP
+#   then open http://localhost:8787 in your browser.
+#
+# Deploy:  docker compose -f docker-compose.paper.yml up -d --build
+# Logs:    docker compose -f docker-compose.paper.yml logs -f
+# Status:  docker compose -f docker-compose.paper.yml ps
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    environment:
+      AUTO_START_PAPER: "1"
+      # Bind to all interfaces INSIDE the container; only published to the
+      # host's loopback below, so it's never exposed to the public internet.
+      DASHBOARD_UNSAFE_BIND: behind-my-own-proxy
+    ports:
+      - "127.0.0.1:8787:8787" # host-localhost only → reach it via SSH tunnel
+    volumes:
+      - bot-data:/app/data
+      - bot-logs:/app/logs
+volumes:
+  bot-data:
+  bot-logs:

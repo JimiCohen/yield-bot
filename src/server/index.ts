@@ -424,4 +424,12 @@ const server = createServer(async (req, res) => {
 
 server.listen(cfg.server.port, host, () => {
   console.log(`dashboard: http://${host}:${cfg.server.port}${isLocal ? " (localhost only)" : " (container mode — proxy provides auth)"}`);
+  // Headless cloud deployments set AUTO_START_PAPER=1 so the bot trades
+  // 24/7 (building the validation track record) without anyone clicking
+  // "Start". This NEVER auto-starts LIVE — only the paper monitor loop;
+  // live still requires mode:live + the validation gate + the --live flag.
+  if (process.env.AUTO_START_PAPER === "1") {
+    const r = startTask("paper", {});
+    console.log(`auto-start paper trading: ${r.ok ? "running" : "failed — " + r.error}`);
+  }
 });

@@ -20,5 +20,6 @@ COPY docs ./docs
 VOLUME ["/app/data", "/app/logs"]
 
 ENV DASHBOARD_UNSAFE_BIND=behind-my-own-proxy
+ENV AUTO_START_PAPER=1
 EXPOSE 8787
 CMD ["npx", "tsx", "src/server/index.ts"]
