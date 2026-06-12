@@ -11,7 +11,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY tsconfig.json config.yaml ./
+COPY tsconfig.json config.yaml config.velodrome.yaml ./
 COPY src ./src
 COPY web ./web
 COPY docs ./docs
