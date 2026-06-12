@@ -120,3 +120,7 @@ pos:after{content:''}
 .dialog { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.6rem; width: 420px; max-width: 92vw; box-shadow: var(--shadow); }
 .dialog h2 { margin-bottom: .6rem; }
 .dialog-btns { display: flex; gap: .7rem; justify-content: flex-end; margin-top: 1.3rem; }
+
+/* ---- backtest lab ---- */
+.lab-head { display: flex; justify-content: space-between; align-items: center; margin: .6rem 0 .2rem; }
+#lab-chart { height: 180px; margin: .6rem 0 .2rem; }

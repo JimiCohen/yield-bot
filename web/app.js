@@ -42,14 +42,27 @@ async function refreshStatus() {
     ? "Bot is finding & managing the best pools automatically"
     : "One click: the bot deploys & manages the top strategies";
 
-  // gate banner — plain words
+  // REAL earnings (realized closed trades + live marks on open positions)
+  if (s.earnings) {
+    const tot = s.earnings.realizedUsd + s.earnings.unrealizedUsd;
+    const el = $("#m-earned");
+    el.textContent = (tot < 0 ? "-$" : "+$") + Math.abs(tot).toFixed(2);
+    el.style.color = tot >= 0 ? "var(--green)" : "var(--red)";
+    el.title = `${s.earnings.closedTrades} closed trades: ${s.earnings.realizedUsd.toFixed(2)} realized, ${s.earnings.unrealizedUsd.toFixed(2)} unrealized`;
+  }
+
+  // gate banner — plain words, REAL state
   const v = s.validation, th = v.thresholds;
   if (v.passed) {
     $("#gate-banner").className = "banner ready";
     $("#gate-banner").innerHTML = `✅ <b>Validated.</b> The strategy proved itself on ${v.entries} practice trades — real-money trading is unlocked.`;
-  } else {
+  } else if (v.entries < th.validation_min_entries) {
     $("#gate-banner").className = "banner locked";
-    $("#gate-banner").innerHTML = `🔒 <b>Proving the strategy on practice money first.</b> ${v.entries} of ${th.validation_min_entries} test trades done — real money unlocks automatically when it’s proven. Your money is safe until then.`;
+    $("#gate-banner").innerHTML = `🔒 <b>Proving the strategy on practice money first.</b> ${v.entries} of ${th.validation_min_entries} test trades done — real money unlocks automatically when it’s proven.`;
+  } else {
+    const acc = v.signAgreement == null ? 0 : Math.round(v.signAgreement * 100);
+    $("#gate-banner").className = "banner locked";
+    $("#gate-banner").innerHTML = `🔒 <b>${v.entries} test trades done — but the strategy isn’t passing yet.</b> Its profit predictions matched reality only <b>${acc}%</b> of the time (needs 70%). The bot keeps practicing and tuning; real money stays locked until this is fixed. That’s the safety system working.`;
   }
   return s;
 }
@@ -72,14 +85,23 @@ async function refreshOpps() {
     const flagNote = o.flags.includes("ADVISORY_APY_UNRECONCILED") ? "data unverified"
       : o.flags.includes("ONCHAIN_GROSS_SUSPECT") ? "yield looks too high — discounted"
       : o.held ? "you're in this" : good ? "ready to deploy" : "not worth it right now";
+    const poolTag = `pool ts${o.tick_spacing}`;
+    if (!good) {
+      // Skipped pools: no fake-looking $50 suggestions — just the verdict.
+      return `<div class="${cls}">
+        <div class="opp-pair">${o.pair} <span class="muted tiny">${poolTag}</span></div>
+        <div class="opp-apr neg">${pct(apr)} <small>best case</small></div>
+        <div class="opp-line"><span class="muted">Not profitable right now — the bot skips it</span></div>
+        <div class="opp-foot"><span class="pill skip">Skipped</span></div>
+      </div>`;
+    }
     let btn;
     if (o.held) btn = `<span class="pill held">In your portfolio</span>`;
-    else if (!good) btn = `<span class="pill skip">Skipped</span>`;
     else if (slotsFull) btn = `<button disabled>Portfolio full</button>`;
     else if (!o.fitsCapital) btn = `<button disabled>Not enough capital free</button>`;
     else btn = `<button class="deploy" data-pool="${o.pool}" data-pair="${o.pair}" data-size="${Math.round(o.position_usd)}" data-apr="${apr.toFixed(0)}">Deploy ${fmt$(o.position_usd)} →</button>`;
     return `<div class="${cls}">
-      <div class="opp-pair">${o.pair} <span class="muted tiny">±${((o.width_mult-1)*100).toFixed(o.width_mult<1.01?2:1)}%</span></div>
+      <div class="opp-pair">${o.pair} <span class="muted tiny">±${((o.width_mult-1)*100).toFixed(o.width_mult<1.01?2:1)}% · ${poolTag}</span></div>
       <div class="opp-apr ${apr>=0?"pos":"neg"}">${pct(apr)} <small>net APR</small></div>
       <div class="opp-line"><span class="muted">Suggested amount</span><span class="v">${fmt$(o.position_usd)}</span></div>
       <div class="opp-line"><span class="muted">Est. earnings</span><span class="v">${fmt$(o.net_usd_h)}/wk · ${fmt$(o.net_usd_h*52/12)}/mo</span></div>
@@ -157,6 +179,48 @@ async function refreshForecast() {
     : "No profitable strategies detected right now — the bot waits in cash rather than lose money.";
 }
 
+// ---- backtest lab ----
+async function refreshLab() {
+  const b = await get("/api/backtests");
+  const runEl = $("#lab-results");
+  if (!b.runs || b.runs.length === 0) { runEl.innerHTML = '<div class="empty">No test runs yet — run one above.</div>'; return; }
+  const r = b.runs[0];
+  const v = r.summary.verdict || {};
+  const net = (r.summary.finalEquity ?? 0) - (r.params.capital ?? 0);
+  runEl.innerHTML = `
+    <div class="lab-head">
+      <span><b>Latest run:</b> ${(r.params.days||0).toFixed(1)} days of real market data, checks every ${Math.round((r.params.stepHours||2)*60)} min</span>
+      <span class="${net>=0?"pos":"neg"}" style="font-weight:700">${net>=0?"+":""}$${net.toFixed(2)}</span>
+    </div>
+    <div class="muted tiny">${(v.notes||[]).join(" · ")}</div>
+    <svg id="lab-chart" viewBox="0 0 640 180" preserveAspectRatio="none"></svg>
+    <div class="muted tiny">Each pair of bars = one trade: <span style="color:var(--blue)">■ what the bot predicted</span> vs <span style="color:var(--green)">■ what actually happened</span> (red = actual loss). Matching heights = trustworthy model.</div>`;
+  const svg = $("#lab-chart");
+  const es = (b.latestEntries || []).slice(0, 24);
+  if (!es.length) { svg.outerHTML = '<div class="empty">Run completed with no trades (stayed in cash).</div>'; return; }
+  const maxAbs = Math.max(1, ...es.flatMap((e) => [Math.abs(e.predicted_net_usd_h), Math.abs(e.realized_net_usd_h)]));
+  const Y = (val) => 90 - (val / maxAbs) * 80;
+  const bw = Math.min(20, 600 / (es.length * 2.6));
+  let bars = `<line x1="0" x2="640" y1="90" y2="90" stroke="#283143"/>`;
+  es.forEach((e, i) => {
+    const x = 14 + i * (bw * 2.6);
+    const p = e.predicted_net_usd_h, a = e.realized_net_usd_h;
+    bars += `<rect x="${x}" y="${Math.min(Y(p), 90)}" width="${bw}" height="${Math.abs(Y(p) - 90)}" fill="var(--blue)" opacity=".8"><title>predicted ${p.toFixed(2)}/wk (${e.pair})</title></rect>`;
+    bars += `<rect x="${x + bw + 1}" y="${Math.min(Y(a), 90)}" width="${bw}" height="${Math.abs(Y(a) - 90)}" fill="${a >= 0 ? "var(--green)" : "var(--red)"}" opacity=".9"><title>actual ${a.toFixed(2)}/wk (${e.pair})</title></rect>`;
+  });
+  svg.innerHTML = bars;
+}
+$("#lab-quick").addEventListener("click", async () => {
+  $("#lab-state").textContent = "Running 3-day detailed test (~10–15 min, uses real on-chain history)…";
+  await post("/api/control/backtest/start", { days: 3, stepHours: 0.0833333 });
+  attachLogs("backtest");
+});
+$("#lab-broad").addEventListener("click", async () => {
+  $("#lab-state").textContent = "Running 14-day broad test (~5–10 min)…";
+  await post("/api/control/backtest/start", { days: 14, stepHours: 2 });
+  attachLogs("backtest");
+});
+
 // ---- advanced (collapsed) ----
 async function refreshAdvanced() {
   const s = await get("/api/status");
@@ -201,7 +265,7 @@ function attachLogs(task = "paper") {
 // ---- boot ----
 function refreshAll() {
   const q = (p) => p.catch(() => {});
-  q(refreshStatus()); q(refreshOpps()); q(refreshPositions()); q(refreshForecast()); q(refreshAdvanced());
+  q(refreshStatus()); q(refreshOpps()); q(refreshPositions()); q(refreshForecast()); q(refreshLab()); q(refreshAdvanced());
 }
 refreshAll();
 attachLogs();

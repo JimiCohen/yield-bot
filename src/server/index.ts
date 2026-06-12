@@ -80,7 +80,9 @@ function taskArgs(kind: TaskKind, body: Record<string, unknown>): string[] {
       return ["src/cli/index.ts", "monitor", "--watch", ...venue];
     case "backtest": {
       const days = Number(body.days) > 0 ? Number(body.days) : cfg.backtest.days;
-      return ["src/cli/index.ts", "backtest", "--days", String(days), ...venue];
+      const args = ["src/cli/index.ts", "backtest", "--days", String(days)];
+      if (Number(body.stepHours) > 0) args.push("--step-hours", String(body.stepHours));
+      return [...args, ...venue];
     }
     case "live":
       return ["src/cli/index.ts", "live", "--live", ...venue];
@@ -186,6 +188,30 @@ const api: Record<string, (url: URL) => unknown> = {
     tasks: { paper: taskStatus("paper"), backtest: taskStatus("backtest"), live: taskStatus("live") },
     validation: validationStats(),
     lastScan: q("SELECT id, ts, block_number FROM scans ORDER BY id DESC LIMIT 1")[0] ?? null,
+    earnings: (() => {
+      // REAL paper P&L: realized from closed trades + unrealized marks on
+      // open positions (from the monitor's latest on-chain check).
+      const realized = q<{ s: number }>(
+        "SELECT COALESCE(SUM(realized_net_usd),0) s FROM paper_entries",
+      )[0]!.s;
+      const open = q<{ id: number; position_usd: number }>(
+        "SELECT id, position_usd FROM paper_positions WHERE status='open'",
+      );
+      const checks = q<{ id: number; v: number; f: number; a: number }>(
+        `SELECT json_extract(payload,'$.paperId') id,
+                json_extract(payload,'$.valueUsd') v,
+                json_extract(payload,'$.feesUsd') f,
+                json_extract(payload,'$.pendingAeroUsd') a,
+                MAX(ts) mts
+         FROM decisions WHERE kind='monitor' GROUP BY json_extract(payload,'$.paperId')`,
+      );
+      let unrealized = 0;
+      for (const o of open) {
+        const c = checks.find((x) => Number(x.id) === o.id);
+        if (c && c.v != null) unrealized += c.v + (c.f ?? 0) + (c.a ?? 0) - o.position_usd;
+      }
+      return { realizedUsd: realized, unrealizedUsd: unrealized, closedTrades: q<{n:number}>("SELECT COUNT(*) n FROM paper_entries")[0]!.n };
+    })(),
   }),
 
   // The money map: every strategy the platform detected, ranked, with the
