@@ -59,9 +59,25 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## BACKTEST VERDICT (2026-06-13, fixed code, 30d real history)
+Replaying the corrected model over ~29 days of real Base history:
+**net +$74 on $1,500 (~62% APR) BUT validation FAILS — sign agreement 60%
+(need 70%), mean alpha/predicted ratio −0.87 (need 0.4–2.5).** Translation:
+the small profit is market BETA, not predictable edge. The model's predicted
+net is ANTI-correlated with realized alpha — its favorite picks (tight,
+high-emission bands) are systematically the ones that realize divergence
+losses. Removing the eta-discount on LVR (commit) nudged it (58→60%,
+−1.40→−0.87) but did NOT cross into positive territory. This is structural,
+not a tuning miss: realized alpha is dominated by price PATH (did the tight
+band hold?), which a zero-drift expected-value model can't predict per-entry.
+Real path to profitability = better in-range/divergence model calibrated
+against MULTIPLE history windows (out-of-sample, not this one 30d window), or
+accept it's a beta play (= gambling, not a yield edge). Either way: NOT READY.
+
 ## The one number that gates everything
 **Validation: 0 of 8 paper trades (clean restart after the accounting fix,
-2026-06-12 ~21:20 UTC). REAL MONEY IS LOCKED — correctly.**
+2026-06-12 ~21:20 UTC); backtest gate also FAILS (above). REAL MONEY IS
+LOCKED — correctly.**
 The `live` command + dashboard enforce this in code. Do NOT weaken the gate;
 let the clean ledger accumulate. With 2h min-hold now enforced everywhere,
 expect ~1–3 entries/day, so the 8-entry minimum lands in roughly 3–7 days.
