@@ -59,6 +59,38 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## ARCHIVE RPC → FIRST MULTI-MONTH PASS (2026-06-13 late)
+User supplied a free Alchemy Base archive key (full depth — confirmed reads at
+60/180/365d). Injected via `BASE_ARCHIVE_RPC` env in gitignored `.env`
+(makeClient prepends it as primary transport; key NEVER committed — repo is
+public). This unlocked granular net-alpha backtests months back.
+
+RESULTS (real on-chain granular data, no-lookahead, regime gate ON, 6h step):
+- **Contiguous 90/120/150d ALL PASS the validation gate**: 74% sign agreement
+  (need 70%), ratio 1.69-1.71 (need 0.4-2.5), +$511 net on $1,500. First real
+  PASS on trustworthy multi-month data. Net identical across window lengths =
+  strategy correctly IDLES in the older unfavorable stretch (no entries added
+  90→150d), not losing.
+- Profit DIVERSIFIED across pools (90d): SOL/USDC ~48%, WETH/USDC ~24%,
+  WETH/cbBTC ~17%, USDC/cbBTC ~10% — blue chips alone (~52%) still profitable.
+- Regime gate A/B (5×30d isolated windows): cuts worst month -$207→-$84 (38→22
+  entries), pooled sign 63%→67%, sum +$902→+$914. Drawdown protection works.
+- `npm run residuals` now sweeps 5×30d months; REGIME_OFF=1 to A/B. CLI
+  `backtest` applies the as-of regime oracle (--no-regime to disable).
+
+HONEST CAVEATS (do not over-claim):
+- Profitable period concentrated in recent ~90d; older months idle/small loss
+  — not yet a full bear-regime test.
+- Tuning (width cap 1.012, regime min_ratio 0.6) informed by recent data →
+  90d PASS is partly in-sample to those choices.
+- SOL/USDC (biggest contributor) is new (~2mo), emissions swing 524%→5755%.
+- 6h step is coarse (may understate intra-step divergence).
+- **The CODE gate reads the PAPER ledger (still 0/8), NOT the backtest.** The
+  backtest PASS is strong evidence; the live gate still requires paper entries.
+NEXT: let paper ledger fill; consider finer-step confirm; optionally test the
+truly-old regime (need pools that existed then). Archive key in .env on this
+machine only — add to VPS .env to enable deep backtests there.
+
 ## REGIME GATE BUILT & LIVE (2026-06-13 night)
 Turned the regime finding into an automated gate (commit). `src/scoring/regime.ts`
 + config.regime {enabled, baseline_lookback_days 150, min_ratio 0.6,

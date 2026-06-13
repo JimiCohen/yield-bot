@@ -18,12 +18,16 @@ export function chainFor(id: number) {
  * formats make it incompatible with viem's generic PublicClient type).
  */
 export function makeClient(cfg: Config) {
+  // An archive endpoint (deep historical state) can be injected via env so the
+  // API key never touches the committed config / public repo. When present it
+  // is the PRIMARY transport (backtests need historical eth_call depth that
+  // public endpoints prune); the config list stays as fallback.
+  const archive = process.env.BASE_ARCHIVE_RPC?.trim();
+  const urls = archive ? [archive, ...cfg.chain.rpc_urls] : cfg.chain.rpc_urls;
   return createPublicClient({
     chain: chainFor(cfg.chain.id),
     transport: fallback(
-      cfg.chain.rpc_urls.map((url) =>
-        http(url, { retryCount: 2, retryDelay: 500, timeout: 15_000 }),
-      ),
+      urls.map((url) => http(url, { retryCount: 2, retryDelay: 500, timeout: 15_000 })),
     ),
     batch: { multicall: { batchSize: 1024, wait: 50 } },
   });

@@ -132,6 +132,10 @@ export function runBacktest(
      *  bypassing the rate-limit and net-benefit gates — simulates the naive
      *  "always rebalance back into range" policy. NOT a strategy. */
     forceRebalance?: boolean;
+    /** Emission-regime gate (as-of, no lookahead): (pair, tsMs) => favorable.
+     *  When provided, entries are blocked for pairs in a faded regime — the
+     *  same rule the live bot enforces. */
+    regimeOracle?: (pair: string, tsMs: number) => boolean;
   } = {},
 ): BacktestResult {
   const H = cfg.scoring.horizon_days;
@@ -577,7 +581,10 @@ export function runBacktest(
             (s) =>
               s.choice.netUsdHorizon > 0 &&
               (s.choice.netUsdHorizon / s.choice.sizeUsd) * (365 / H) * 100 >=
-                cfg.scoring.min_net_yield_apr,
+                cfg.scoring.min_net_yield_apr &&
+              // Emission-regime gate (as-of, no lookahead) — same rule the live
+              // bot enforces; lets the backtest measure its months-back value.
+              (!opts.regimeOracle || opts.regimeOracle(s.tp.pair, tsNow)),
           );
       const best = viable[0];
       if (!pos && best) {

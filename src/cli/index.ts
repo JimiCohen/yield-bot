@@ -26,7 +26,7 @@ import { evaluateSwitch } from "../strategy/switch.js";
 import { checkRiskTriggers } from "../strategy/risk.js";
 import { viableScores } from "../scoring/netYield.js";
 import type { PoolScore } from "../scoring/netYield.js";
-import { loadRegimeBaseline, refreshRegimeBaseline, isRegimeFavorable } from "../scoring/regime.js";
+import { loadRegimeBaseline, refreshRegimeBaseline, isRegimeFavorable, buildHistoricalRegimeOracle } from "../scoring/regime.js";
 import type { PoolPricing } from "../scoring/clmath.js";
 
 function fmtUsd(n: number): string {
@@ -291,7 +291,13 @@ async function cmdBacktest(configPath: string, args: string[]) {
   }
 
   console.log("\nReplaying strategy (trailing-data-only decisions)...");
-  const res = runBacktest(cfg, store, hist, gas, (m) => console.log(m));
+  // Apply the live emission-regime gate as-of (no lookahead), so the backtest
+  // reflects the same strategy that runs in production.
+  const regimeOracle =
+    cfg.regime.enabled && !args.includes("--no-regime")
+      ? await buildHistoricalRegimeOracle(cfg.regime.baseline_lookback_days, cfg.regime.min_ratio)
+      : undefined;
+  const res = runBacktest(cfg, store, hist, gas, (m) => console.log(m), { regimeOracle });
 
   const H = cfg.scoring.horizon_days;
   console.log(

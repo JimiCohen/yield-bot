@@ -169,4 +169,44 @@ export async function classifyHistory(
   return out;
 }
 
+/**
+ * Build an AS-OF historical regime oracle for backtesting (no lookahead):
+ * given a pair and a timestamp, decide favorable/not using only DefiLlama
+ * points up to that timestamp. Lets the backtest apply the SAME gate the live
+ * bot uses, so its months-back value can be measured, not assumed.
+ */
+export async function buildHistoricalRegimeOracle(
+  lookbackDays: number,
+  minRatio: number,
+): Promise<(pair: string, tsMs: number) => boolean> {
+  const series = new Map<string, { t: number; rew: number }[]>();
+  const fetched = new Map<string, { t: number; rew: number }[]>();
+  for (const pair of Object.keys(UUID)) {
+    const uuid = UUID[pair]!;
+    if (!fetched.has(uuid)) {
+      try {
+        const data = await fetchSeries(uuid);
+        fetched.set(
+          uuid,
+          data.map((x) => ({ t: Date.parse(x.timestamp), rew: x.apyReward ?? 0 })),
+        );
+      } catch {
+        fetched.set(uuid, []);
+      }
+    }
+    series.set(pair, fetched.get(uuid)!);
+  }
+  const DAY = 86_400_000;
+  return (pair: string, tsMs: number): boolean => {
+    const s = series.get(pair);
+    if (!s || s.length === 0) return true; // unmapped/no data → fail open
+    const upto = s.filter((p) => p.t <= tsMs);
+    if (upto.length < 10) return true; // too little history as-of → fail open
+    const cur = med(upto.slice(-7).map((p) => p.rew));
+    const base = med(upto.filter((p) => p.t >= tsMs - lookbackDays * DAY).map((p) => p.rew));
+    const ratio = base > 0 ? cur / base : cur > 0 ? Infinity : 1;
+    return ratio >= minRatio;
+  };
+}
+
 export { UUID as REGIME_UUIDS };

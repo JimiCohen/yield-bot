@@ -5,6 +5,7 @@ import { scanPools } from "../data/scanner.js";
 import { discoverAeroPricing } from "../scoring/emissions.js";
 import { fetchHistory } from "./history.js";
 import { runBacktest, type BacktestEntryResult } from "./backtest.js";
+import { buildHistoricalRegimeOracle } from "../scoring/regime.js";
 
 /**
  * Residual analyzer — the quant diagnostic, not a strategy.
@@ -25,16 +26,18 @@ const cfg = loadConfig("config.yaml");
 const client = makeClient(cfg);
 const store = new Store(cfg.db.path);
 
-// Robustness sweep over the DENSE-DATA span only (history_samples thins out
-// ~15x beyond ~14 days ago — older windows can't be simulated faithfully, so
-// including them measures RPC gaps, not strategy edge). These three windows
-// each have >18k samples.
+// Robustness sweep across MONTHS (archive RPC backfills these). Non-overlapping
+// 30d windows stepping back ~6 months — judges the strategy across many regimes,
+// not one lucky period. Set BASE_ARCHIVE_RPC for depth.
 const WINDOWS = [
-  { label: "w0 (0-7d ago)", days: 7, endDaysAgo: 0 },
-  { label: "w1 (4-11d ago)", days: 7, endDaysAgo: 4 },
-  { label: "w2 (7-14d ago)", days: 7, endDaysAgo: 7 },
+  { label: "m0 (0-30d)", days: 30, endDaysAgo: 0 },
+  { label: "m1 (30-60d)", days: 30, endDaysAgo: 30 },
+  { label: "m2 (60-90d)", days: 30, endDaysAgo: 60 },
+  { label: "m3 (90-120d)", days: 30, endDaysAgo: 90 },
+  { label: "m4 (120-150d)", days: 30, endDaysAgo: 120 },
 ];
-const STEP_HOURS = cfg.backtest.step_hours;
+const STEP_OVERRIDE = 6; // hours; coarser keeps the deep sweep within RPC budget
+const STEP_HOURS = STEP_OVERRIDE;
 
 function mean(xs: number[]): number {
   return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : NaN;
@@ -75,7 +78,7 @@ function decompose(e: BacktestEntryResult, H: number) {
 
 const all: ReturnType<typeof decompose>[] = [];
 
-console.log(`Residual analysis — term-by-term prediction error, ${WINDOWS.length} windows\n`);
+console.log(`Residual analysis — term-by-term, ${WINDOWS.length} windows (REGIME_OFF=${!!process.env.REGIME_OFF})\n`);
 const snapshotsAero = await (async () => {
   const { snapshots, pricesUsd } = await scanPools(cfg, client, null);
   const aero = await discoverAeroPricing(client, cfg);
@@ -84,22 +87,31 @@ const snapshotsAero = await (async () => {
   return { snapshots, aero, gas };
 })();
 
+// As-of regime oracle (no lookahead) so the backtest applies the SAME gate the
+// live bot uses. Disable with REGIME_OFF=1 to A/B its value.
+const oracle = process.env.REGIME_OFF
+  ? undefined
+  : await buildHistoricalRegimeOracle(cfg.regime.baseline_lookback_days, cfg.regime.min_ratio);
+
+let totalNet = 0;
 for (const w of WINDOWS) {
   const hist = await fetchHistory(
     cfg, client, store, snapshotsAero.snapshots, snapshotsAero.aero,
     { days: w.days, stepHours: STEP_HOURS, endDaysAgo: w.endDaysAgo },
     () => {},
   );
-  const res = runBacktest(cfg, store, hist, snapshotsAero.gas, () => {});
+  const res = runBacktest(cfg, store, hist, snapshotsAero.gas, () => {}, { regimeOracle: oracle });
   const H = cfg.scoring.horizon_days;
   const rows = res.entries.map((e) => decompose(e, H));
   all.push(...rows);
   const ret = res.finalEquityUsd - res.startCapitalUsd;
+  totalNet += ret;
   console.log(
     `[${w.label}] ${rows.length} entries | net ${ret >= 0 ? "+" : ""}$${ret.toFixed(2)} | ` +
       `sign-agree ${(100 * rows.filter((r) => Math.sign(r.realizedAlpha) === Math.sign(r.predNet)).length / (rows.length || 1)).toFixed(0)}%`,
   );
 }
+console.log(`\nSUM net across all windows: ${totalNet >= 0 ? "+" : ""}$${totalNet.toFixed(2)}`);
 
 if (all.length === 0) {
   console.log("\nNo entries produced — nothing to analyze.");
