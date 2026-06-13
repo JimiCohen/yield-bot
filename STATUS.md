@@ -59,7 +59,21 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
-## ARCHIVE RPC → FIRST MULTI-MONTH PASS (2026-06-13 late)
+## GRANULARITY CHECK (2026-06-13 latest) — the 6h PASS was NOT robust
+Re-ran at realistic 2h step (live checks at 15min, even finer): 60d nets +$570
+(still profitable) but validation = WARN: sign agreement 67% (<70%), ratio 0.22
+(over-predicts, <0.4 floor). The 6h PASS came from fewer/longer holds; at finer
+resolution the bot trades 3x more (154 vs 47) and the emission over-prediction
+returns. Tried conf_emissions haircuts 0.45/0.35/0.25 @2h: profit collapses
+(+$570→$84-147) and sign agreement does NOT improve (45-59%). So it's NOT a
+tuning miss — per-trade prediction simply isn't reliable enough at trading
+cadence. CONCLUSION: backtest confirms the strategy is consistently PROFITABLE
+(+$500-570 every run) but does NOT robustly clear the prediction gate at real
+granularity. The trustworthy judge is the LIVE PAPER LEDGER (real cadence, real
+gates, real on-chain marks) — now filling organically (3/8). Do NOT go live on
+the 6h backtest; wait for the paper gate. NOT live-ready.
+
+## ARCHIVE RPC → 6h multi-month backtest (2026-06-13 late) — see granularity caveat above
 User supplied a free Alchemy Base archive key (full depth — confirmed reads at
 60/180/365d). Injected via `BASE_ARCHIVE_RPC` env in gitignored `.env`
 (makeClient prepends it as primary transport; key NEVER committed — repo is
