@@ -26,8 +26,17 @@ Diagnosis of the ledger found THREE defects that made validation garbage-in:
 Validation stats are now HOLD-TIME WEIGHTED (weight = days_held, capped at
 horizon; per-entry ratio clamped ±5) in BOTH store.getValidationStats and
 server validationStats — keep them mirrored.
-The 13 pre-fix ledger rows were measured with a broken ruler → moved to
+The pre-fix ledger rows were measured with a broken ruler → moved to
 `paper_entries_quarantined` (audit trail kept). Ledger restarts at 0/8.
+SUBTLE: a position OPENED pre-fix but CLOSED post-fix still writes a tainted
+row (it carries the buggy entry L/amounts) — local #16 did exactly this after
+restart (alpha −$2,946/7d noise). So the cleanup is two parts, both idempotent:
+(1) quarantine all existing paper_entries, (2) set status='abandoned' on any
+still-open paper_positions so pre-fix opens never write a ledger entry.
+'abandoned' is safe — every query filters status='open' (verified). Local DONE
+(14 rows quarantined). VPS: run the same via
+`docker compose -f docker-compose.paper.yml exec -T bot node -e '<combined script>'`
+(better-sqlite3 is in the image; no sqlite3 CLI). No restart needed — db is read live.
 
 ## What this is
 An automated DeFi yield bot for Aerodrome (Base) + Velodrome (Optimism)
