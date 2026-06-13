@@ -113,6 +113,18 @@ export const configSchema = z.object({
     max_position_usd: z.number().positive().optional(),
   }),
 
+  // Emission-regime gate: only deploy into pools whose current emissions clear
+  // a fraction of their own trailing baseline (DefiLlama, ~11mo). Rides spikes,
+  // stands down when carry fades. Fails OPEN (never freezes the bot on missing
+  // data). See src/scoring/regime.ts.
+  regime: z.object({
+    enabled: z.boolean(),
+    baseline_lookback_days: z.number().int().positive(),
+    // Deploy when current emission APY >= min_ratio x trailing-median APY.
+    min_ratio: z.number().gt(0),
+    max_staleness_hours: z.number().positive(),
+  }),
+
   rebalance: z.object({
     check_interval_minutes: z.number().positive(),
     deadband_fraction: z.number().min(0).max(1),

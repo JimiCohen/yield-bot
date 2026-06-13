@@ -96,6 +96,14 @@ position:
   min_position_usd: 50
   max_positions: 3
 
+# Regime gate off for Velodrome until DefiLlama pool UUIDs are mapped for
+# Optimism pairs (src/scoring/regime.ts UUID map is Base/Aerodrome only).
+regime:
+  enabled: false
+  baseline_lookback_days: 150
+  min_ratio: 0.6
+  max_staleness_hours: 48
+
 rebalance:
   check_interval_minutes: 5
   deadband_fraction: 0.25

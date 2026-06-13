@@ -150,6 +150,17 @@ position:
   max_position_usd: 200    # HARD per-position ceiling for LIVE (first-trade safety;
                            # clamps every live entry regardless of wallet/optimizer)
 
+# --- Emission-regime gate ------------------------------------------------
+# 11 months of DefiLlama history show emission carry is volatile + mean-
+# reverting; the strategy bleeds in low-emission months. This gate RIDES
+# spikes and STANDS DOWN when a pool's emissions fall below its own baseline.
+# Fails open (never freezes the bot) on missing/stale data.
+regime:
+  enabled: true
+  baseline_lookback_days: 150  # trailing window for the "normal" emission level
+  min_ratio: 0.6               # deploy only if current emissions >= 0.6x that baseline
+  max_staleness_hours: 48      # ignore the gate if the baseline cache is older than this
+
 # --- Anti-over-rebalancing gates (Phase 5) -------------------------------
 rebalance:
   # Check interval: 15 min. A rigorous 2-window cadence sweep (5→120 min)

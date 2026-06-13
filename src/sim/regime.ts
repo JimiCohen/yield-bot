@@ -1,69 +1,50 @@
+import { loadConfig } from "../config/load.js";
+import { refreshRegimeBaseline, classifyHistory, isRegimeFavorable, REGIME_UUIDS } from "../scoring/regime.js";
+
 /**
- * Emission-regime history (months back) via DefiLlama yields — no API key.
+ * Emission-regime report + the gate's honest validation.
  *
- * The granular tick-level backtest only reaches ~14 days (public RPCs prune
- * state; archive needs a key). But DefiLlama keeps ~11 MONTHS of daily
- * headline APY (split base=fees / reward=emissions) + TVL per pool. That is
- * enough to answer the question that one good fortnight cannot: is the current
- * profitable regime REPRESENTATIVE, or an unusually high-emission spike?
+ * Top: current per-pool status (DEPLOY / STAND DOWN) from the live baseline.
+ * Bottom: month-by-month, what the gate WOULD have done over ~11 months —
+ * the validation that it rides high-emission spikes and stands down when carry
+ * fades (no-lookahead: each month judged on the trailing median up to it).
  *
- * It also computes a persistence signal — current reward APY vs the pool's own
- * trailing median — because the strategy harvests emission carry, and the
- * residual analysis showed that carry is over-credited (it mean-reverts over
- * the hold). current/median >> 1 means "today's emissions are a spike; do not
- * extrapolate them over the 7-day horizon."
+ * Granular net-alpha backtest months back still needs an archive RPC (public
+ * Base endpoints prune state); this regime layer is the months-scale guard we
+ * CAN build from free data today.
  */
 
-const POOLS: { pair: string; uuid: string }[] = [
-  { pair: "WETH/USDC", uuid: "10137e20-efbc-4e15-a733-17ecb52c48e8" },
-  { pair: "USDC/cbBTC", uuid: "ff82c362-dea1-4946-b3b1-92ebd5100b1e" },
-  { pair: "WETH/cbBTC", uuid: "4943b6d2-aad2-4f4d-b56e-93f41ef043aa" },
-  { pair: "SOL/USDC", uuid: "a6a1fe38-a220-4f68-a2b9-d2749c3e4664" },
-];
+const cfg = loadConfig("config.yaml");
+const PAIRS = ["WETH/USDC", "USDC/cbBTC", "WETH/cbBTC", "SOL/USDC"];
 
-type Pt = { timestamp: string; apyReward: number | null; apyBase: number | null; tvlUsd: number | null };
-const med = (a: number[]) => (a.length ? [...a].sort((x, y) => x - y)[Math.floor(a.length / 2)]! : 0);
-
-for (const p of POOLS) {
-  let data: Pt[];
-  try {
-    const r = await fetch(`https://yields.llama.fi/chart/${p.uuid}`);
-    data = ((await r.json()) as { data: Pt[] }).data;
-  } catch (e) {
-    console.log(`${p.pair}: fetch failed (${e instanceof Error ? e.message : e})`);
-    continue;
-  }
-  if (!data?.length) {
-    console.log(`${p.pair}: no data`);
-    continue;
-  }
-  const byMonth = new Map<string, Pt[]>();
-  for (const r of data) {
-    const mo = r.timestamp.slice(0, 7);
-    (byMonth.get(mo) ?? byMonth.set(mo, []).get(mo)!).push(r);
-  }
+console.log("Refreshing regime baseline (DefiLlama, ~11mo, no key)...\n");
+const b = await refreshRegimeBaseline(cfg, (m) => console.log("  " + m));
+console.log(
+  `\n== CURRENT REGIME (min_ratio ${cfg.regime.min_ratio}, lookback ${cfg.regime.baseline_lookback_days}d) ==`,
+);
+console.log("pair         emisAPY now   11mo-median   ratio   decision");
+for (const pair of PAIRS) {
+  const s = b.pairs[pair];
+  if (!s) continue;
+  const r = isRegimeFavorable(cfg, b, pair, Date.now());
   console.log(
-    `\n=== ${p.pair} (${data.length} daily pts, ${data[0]!.timestamp.slice(0, 10)} → ${data[data.length - 1]!.timestamp.slice(0, 10)}) ===`,
-  );
-  console.log("month     emisAPY%  feeAPY%        TVL$");
-  for (const mo of [...byMonth.keys()].sort()) {
-    const rows = byMonth.get(mo)!;
-    console.log(
-      `${mo}   ${med(rows.map((x) => x.apyReward ?? 0)).toFixed(0).padStart(8)}  ` +
-        `${med(rows.map((x) => x.apyBase ?? 0)).toFixed(1).padStart(7)}  ` +
-        `${med(rows.map((x) => x.tvlUsd ?? 0)).toLocaleString("en-US", { maximumFractionDigits: 0 }).padStart(12)}`,
-    );
-  }
-  const rew = data.map((x) => x.apyReward ?? 0);
-  const allMed = med(rew);
-  const cur = med(rew.slice(-7)); // last week
-  console.log(
-    `  emissions now (7d med): ${cur.toFixed(0)}%  |  11-mo median: ${allMed.toFixed(0)}%  |  ` +
-      `persistence = median/now = ${allMed > 0 && cur > 0 ? (allMed / cur).toFixed(2) : "n/a"} ` +
-      `(<<1 ⇒ today is a spike; discount forward emissions)`,
+    `${pair.padEnd(11)}  ${(s.currentApy.toFixed(0) + "%").padStart(10)}   ${(s.medianApy.toFixed(0) + "%").padStart(10)}   ${s.ratio.toFixed(2).padStart(5)}   ${r.favorable ? "✅ DEPLOY" : "🛑 STAND DOWN"}`,
   );
 }
+
+console.log("\n== GATE VALIDATION: month-by-month over ~11mo (no lookahead) ==");
+for (const pair of PAIRS) {
+  if (!REGIME_UUIDS[pair]) continue;
+  const hist = await classifyHistory(pair, cfg.regime.baseline_lookback_days, cfg.regime.min_ratio);
+  const deployed = hist.filter((h) => h.deploy).length;
+  console.log(`\n${pair} — would deploy ${deployed}/${hist.length} months:`);
+  const line = hist
+    .map((h) => `${h.month.slice(2)}:${h.deploy ? "✅" : "🛑"}`)
+    .join("  ");
+  console.log("  " + line);
+}
 console.log(
-  "\nGranular net-alpha backtest months back needs an ARCHIVE RPC (free public ones prune state).\n" +
-    "Add one keyed endpoint to config chain.rpc_urls and re-run `npm run residuals` with larger --days.",
+  "\nThe gate RIDES high-emission months (✅) and STANDS DOWN when a pool's\n" +
+    "emissions fade below its trailing baseline (🛑) — turning a spike-dependent\n" +
+    "carry into an explicit, automated rule. It fails open on missing/stale data.",
 );

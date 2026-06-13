@@ -26,6 +26,7 @@ import { evaluateSwitch } from "../strategy/switch.js";
 import { checkRiskTriggers } from "../strategy/risk.js";
 import { viableScores } from "../scoring/netYield.js";
 import type { PoolScore } from "../scoring/netYield.js";
+import { loadRegimeBaseline, refreshRegimeBaseline, isRegimeFavorable } from "../scoring/regime.js";
 import type { PoolPricing } from "../scoring/clmath.js";
 
 function fmtUsd(n: number): string {
@@ -346,6 +347,24 @@ async function cmdMonitor(configPath: string, args: string[]) {
       }`,
     );
 
+    // Emission-regime baseline (refresh if stale; fail-open on error).
+    let regimeBaseline = loadRegimeBaseline(cfg);
+    if (
+      cfg.regime.enabled &&
+      (!regimeBaseline || (Date.now() - regimeBaseline.asOf) / 3_600_000 > cfg.regime.max_staleness_hours / 2)
+    ) {
+      try {
+        regimeBaseline = await refreshRegimeBaseline(cfg, (m) => console.log("  " + m));
+      } catch (e) {
+        console.log(`  regime refresh failed (${e instanceof Error ? e.message : e}) — fail-open`);
+      }
+    }
+    const regimeOk = (pair: string): boolean => {
+      const r = isRegimeFavorable(cfg, regimeBaseline, pair, Date.now());
+      if (!r.favorable) console.log(`  regime gate: ${pair} ${r.reason}`);
+      return r.favorable;
+    };
+
     // --- paper positions: check, then run the full decision stack ---------
     const open = store.getOpenPaperPositions();
     if (open.length === 0) {
@@ -480,7 +499,7 @@ async function cmdMonitor(configPath: string, args: string[]) {
       const sw = evaluateSwitch(
         cfg,
         { pool: p.pool, pair: p.pair, valueUsd: c.valueUsd, ageMs: Date.now() - p.openedTs },
-        freshScore, viableScores(scores, cfg), pricingForScore, pricing, snap, gas,
+        freshScore, viableScores(scores, cfg, regimeOk), pricingForScore, pricing, snap, gas,
       );
       audit.record("switch_decision", p.pool, sw.action.toUpperCase(), {
         paperId: p.id,
@@ -507,7 +526,7 @@ async function cmdMonitor(configPath: string, args: string[]) {
       const heldPools = new Set(held.map((x) => x.pool.toLowerCase()));
       let deployed = held.reduce((a, x) => a + x.positionUsd, 0);
       let opened = 0;
-      for (const cand of viableScores(scores, cfg)) {
+      for (const cand of viableScores(scores, cfg, regimeOk)) {
         if (heldPools.size + 0 >= cfg.position.max_positions) break;
         const pool = cand.snapshot.pool.toLowerCase();
         if (heldPools.has(pool)) continue;

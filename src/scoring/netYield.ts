@@ -54,13 +54,21 @@ export function positionSizeUsd(cfg: Config): number {
 /** The allocation filter: positive NEY, clears the minimum APR floor, and
  *  reconciles against advisory data. Used by entry, auto-open and switch
  *  targeting so all three share one definition of "worth holding". */
-export function viableScores(scores: PoolScore[], cfg: Config): PoolScore[] {
+export function viableScores(
+  scores: PoolScore[],
+  cfg: Config,
+  isRegimeFavorable?: (pair: string) => boolean,
+): PoolScore[] {
   return scores.filter(
     (s) =>
       s.choice &&
       s.choice.netUsdHorizon > 0 &&
       (s.neyAprPct ?? -1) >= cfg.scoring.min_net_yield_apr &&
-      !s.flags.includes("ADVISORY_APY_UNRECONCILED"),
+      !s.flags.includes("ADVISORY_APY_UNRECONCILED") &&
+      // Emission-regime gate: skip pools whose emissions have faded below
+      // their baseline. Pure/optional so callers without regime data behave
+      // exactly as before.
+      (!isRegimeFavorable || isRegimeFavorable(s.snapshot.pair)),
   );
 }
 

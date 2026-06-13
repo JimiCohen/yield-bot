@@ -8,6 +8,7 @@ import { PERIPHERY } from "../chain/addresses.js";
 import { positionManagerAbi } from "../chain/abis.js";
 import { positionValueUsd, type PoolPricing } from "../scoring/clmath.js";
 import { scorePools, viableScores, positionSizeUsd, type PoolScore } from "../scoring/netYield.js";
+import { loadRegimeBaseline, refreshRegimeBaseline, isRegimeFavorable } from "../scoring/regime.js";
 import { evaluateRebalance } from "../strategy/rebalance.js";
 import { evaluateSwitch } from "../strategy/switch.js";
 import { checkRiskTriggers } from "../strategy/risk.js";
@@ -106,7 +107,25 @@ export async function runLiveCycle(
   const usdcAddr = cfg.allowlist.tokens["USDC"]!.address;
   const { scores, gas, aero } = await scorePools(cfg, client, store, snapshots, pricesUsd, blockNumber);
   const routes = buildRoutes(cfg, snapshots, aero ? { pool: aero.pool } : null);
-  const viable = viableScores(scores, cfg);
+  // Emission-regime gate (refresh if stale; fail-open). Same baseline the
+  // paper monitor uses — real money only deploys into favorable regimes.
+  let regimeBaseline = loadRegimeBaseline(cfg);
+  if (
+    cfg.regime.enabled &&
+    (!regimeBaseline || (Date.now() - regimeBaseline.asOf) / 3_600_000 > cfg.regime.max_staleness_hours / 2)
+  ) {
+    try {
+      regimeBaseline = await refreshRegimeBaseline(cfg, log);
+    } catch (e) {
+      log(`regime refresh failed (${e instanceof Error ? e.message : e}) — fail-open`);
+    }
+  }
+  const regimeOk = (pair: string): boolean => {
+    const r = isRegimeFavorable(cfg, regimeBaseline, pair, Date.now());
+    if (!r.favorable) log(`regime gate: ${pair} ${r.reason}`);
+    return r.favorable;
+  };
+  const viable = viableScores(scores, cfg, regimeOk);
 
   const pricingForScore = (sc: PoolScore): PoolPricing | null => {
     const p0 = pricesUsd[sc.snapshot.symbol0];
