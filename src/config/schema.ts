@@ -106,6 +106,11 @@ export const configSchema = z.object({
     min_position_usd: z.number().positive(),
     // Simultaneous positions across different pools (the rotation portfolio).
     max_positions: z.number().int().min(1).max(10),
+    // Hard ceiling on a SINGLE live position, in USDC. Enforced at the live
+    // entry chokepoint regardless of optimizer choice or wallet balance — a
+    // belt-and-suspenders bound on first real-money trades. Optional; when
+    // unset there is no extra cap beyond the wallet balance and pool fraction.
+    max_position_usd: z.number().positive().optional(),
   }),
 
   rebalance: z.object({

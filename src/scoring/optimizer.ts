@@ -210,7 +210,14 @@ export function optimizeWidth(inp: OptimizeInput): WidthChoice | null {
     const armBest = armCandidates[0]!;
 
     // --- Costs -------------------------------------------------------------
-    const lvr = ((sigma * sigma) / 8) * lev * C * H_YEARS * eta;
+    // Divergence is NOT discounted by in-range fraction. The old `* eta`
+    // assumed you only bleed LVR while in range — but a rate-limited band
+    // that exits LOCKS IN the divergence (it converts to the losing side and
+    // sits there until the next allowed recenter). Discounting it made tight,
+    // fast-exiting, high-emission bands look profitable when they realize
+    // losses — the source of the anti-correlated (negative) alpha/predicted
+    // ratio in 30d replay. Charge full-horizon divergence.
+    const lvr = ((sigma * sigma) / 8) * lev * C * H_YEARS;
     const rebalCost = nRebal * rebalanceCost;
     const net = armBest.weighted - lvr - rebalCost - entryExitCost;
     if (debugOn) debug.push({ C, m, net, gross: armBest.weighted, lvr, reb: rebalCost, arm: armBest.arm });

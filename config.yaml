@@ -147,6 +147,8 @@ position:
   max_pool_fraction: 0.80  # PAPER-LEARNING (was 0.40); budget ceiling per pool
   min_position_usd: 50     # size-grid floor (fixed costs priced by the model)
   max_positions: 3         # simultaneous pools (the rotation portfolio)
+  max_position_usd: 200    # HARD per-position ceiling for LIVE (first-trade safety;
+                           # clamps every live entry regardless of wallet/optimizer)
 
 # --- Anti-over-rebalancing gates (Phase 5) -------------------------------
 rebalance:

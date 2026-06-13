@@ -60,6 +60,14 @@ export function buildRoutes(cfg: Config, snapshots: PoolSnapshot[], aeroPool: { 
 function enterCtxFromScore(cfg: Config, top: PoolScore, usdcRaw: bigint): EnterCtx {
   const s = top.snapshot;
   const choice = top.choice!;
+  // Hard live position cap — clamp BEFORE building the entry, so it bounds
+  // auto-open, rebalance re-entry, and switch alike. First real trades stay
+  // small even if the wallet is over-funded or the optimizer wants more.
+  if (cfg.position.max_position_usd !== undefined) {
+    const usdc = cfg.allowlist.tokens["USDC"]!;
+    const capRaw = BigInt(Math.floor(cfg.position.max_position_usd * 10 ** usdc.decimals));
+    if (usdcRaw > capRaw) usdcRaw = capRaw;
+  }
   const halfWidthTicks = Math.log(choice.widthMult) / LN_TICK;
   const snapTick = (t: number) => Math.round(t / s.tickSpacing) * s.tickSpacing;
   let tickLower = snapTick(s.tick - halfWidthTicks);
