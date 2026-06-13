@@ -59,6 +59,28 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## REGIME DATA (2026-06-13 night) — 11 MONTHS via DefiLlama (`npm run regime`)
+Granular state months back is blocked (tested 13 public RPCs — ALL prune state;
+needs a keyed archive endpoint). But DefiLlama yields gives ~11 months of daily
+headline APY (base=fees / reward=emissions) + TVL per pool, no key. Verdict:
+**the recent backtest profit is REGIME-FAVORABLE, not steady-state.** Current
+emissions sit ABOVE each pool's 11-month median:
+  WETH/USDC   now ~24% vs median 12%  (persistence 0.49)
+  USDC/cbBTC  now ~26% vs median ~12% (persistence ~0.5)
+  WETH/cbBTC  now ~11% vs median  8%  (persistence 0.69)
+  SOL/USDC    now 3777% vs median 1148% (persistence 0.30)  ← the pocket; tiny
+              ($228k TVL), new (61d), emissions swing 524%→5755% month to month.
+Emission carry has been LOW for long stretches (e.g. WETH/cbBTC 3-9% most of
+2026) → in those months the strategy would lose (divergence > carry). So:
+- The June-2026 profitable window is an emission spike; do NOT extrapolate it.
+- Within the 14d dense backtest the over-prediction is eta/share (not rate
+  decay — gauge rate is ~stable intra-window); the persistence signal is a
+  MONTHS-scale risk caveat, not a within-window fix. Did NOT bolt an
+  unvalidatable persistence multiplier onto the live scorer.
+TO UNLOCK granular multi-month net-alpha validation: add ONE keyed archive RPC
+(Alchemy/QuickNode/Chainstack free tier) to chain.rpc_urls, then
+`npm run residuals` / `backtest --days 180`. That is the real next step.
+
 ## QUANT PASS (2026-06-13 eve) — residual analysis + 2 evidence-based fixes
 Built `npm run` script src/sim/residuals.ts: term-by-term predicted-vs-realized
 decomposition across MULTIPLE no-lookahead windows. Findings:
