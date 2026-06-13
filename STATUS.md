@@ -59,6 +59,30 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## QUANT PASS (2026-06-13 eve) — residual analysis + 2 evidence-based fixes
+Built `npm run` script src/sim/residuals.ts: term-by-term predicted-vs-realized
+decomposition across MULTIPLE no-lookahead windows. Findings:
+- **Data cliff:** history_samples thin ~15x beyond ~14d ago (week3/4 ≈ 1.2k
+  samples vs ~20k recent). Only the recent ~14d is faithfully simulatable;
+  older "losses" were RPC-gap artifacts, NOT regime proof.
+- **On trustworthy (dense) data the strategy IS profitable:** recent 7d
+  windows +$106 (72% sign) and +$77 (67% sign); contiguous 14d nets +$163
+  (~300% APR). 2 of 3 dense windows positive.
+- **Dominant error = emission capture over-predicted ~2x** (yield bias ~0.5,
+  stable across every window/bucket).
+- **Losses concentrate in WIDE bands (>1.2%)**: negative realized alpha,
+  capture over-predicted ~4x. Tight (<=0.6%) bands earn +$90-105, well
+  calibrated. Mechanism: wide bands dilute emission share, just carry beta.
+- **Per-trade corr(predicted net, realized alpha) ≈ 0.2** — thin carry
+  swamped by divergence noise; ranking power is weak.
+- **THE conflict:** profitable config (conf_emissions 0.7) FAILS gate
+  (ratio −1.85, over-predicts); gate-friendly config (conf 0.4) LOSES money.
+  Gate measures CALIBRATION; profit comes from directional pool selection.
+Kept (principled): width_grid.max_mult 2.0→1.012 (cut losing wide-band tail).
+Rejected by data (opt-in, default off): empirical in-range eta (EMP_ETA env —
+better calibration, worse profit/ranking); flat emission haircut (fixed ratio,
+lost money). Both documented in commit. NOT cleared for live.
+
 ## BACKTEST VERDICT (2026-06-13, fixed code, 30d real history)
 Replaying the corrected model over ~29 days of real Base history:
 **net +$74 on $1,500 (~62% APR) BUT validation FAILS — sign agreement 60%

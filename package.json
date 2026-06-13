@@ -24,6 +24,7 @@
     "cadence-test": "tsx src/sim/checkCadence.ts",
     "discover": "tsx src/cli/index.ts discover",
     "strategy-table": "tsx src/sim/strategyTable.ts",
+    "residuals": "tsx src/sim/residuals.ts",
     "cadence-sweep": "tsx src/sim/cadenceSweep.ts"
   },
   "dependencies": {
