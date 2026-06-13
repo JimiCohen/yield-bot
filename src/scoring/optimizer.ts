@@ -59,6 +59,14 @@ export interface OptimizeInput {
   vol: VolEstimate;
   cfg: Config;
   gas: GasContext;
+  /**
+   * Empirical in-range fraction for a band of effective width mEff, measured
+   * from trailing price history (no lookahead). When provided it REPLACES the
+   * zero-drift GBM estimate of eta — which residual analysis showed over-
+   * predicts emission capture ~2x because real price paths mean-revert and
+   * stick far more than Brownian motion assumes. Returns a fraction in (0,1].
+   */
+  inRangeFor?: (mEff: number) => number;
   /** When set and equal to $OPT_DEBUG, dumps the top grid cells. */
   debugTag?: string;
 }
@@ -159,6 +167,14 @@ export function optimizeWidth(inp: OptimizeInput): WidthChoice | null {
     } else {
       nRebalRaw = H_YEARS / checkYears; // recenter every check, no faster
       eta = exitYears / checkYears; // in range only until first exit
+    }
+    // Prefer the EMPIRICAL in-range fraction when available — measured from
+    // real trailing price paths, it corrects the GBM eta's ~2x over-credit of
+    // emission capture (residual analysis). GBM still drives nRebal (recenter
+    // count), which the empirical estimator does not directly provide.
+    if (inp.inRangeFor) {
+      const e = inp.inRangeFor(mEff);
+      if (Number.isFinite(e)) eta = Math.min(1, Math.max(0, e));
     }
 
     // A width that needs more recenters than the rate limit allows is

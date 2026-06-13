@@ -60,6 +60,8 @@ interface OpenPosition {
   entryIdx: number;
   entryTs: number;
   predictedNetUsdH: number;
+  predictedGrossUsdH: number; // predicted yield arm (emissions or fees)
+  predictedLvrUsdH: number; // predicted divergence/LVR cost
   feesUsd: number;
   pendingAero: number;
   emissionsUsd: number;
@@ -80,6 +82,8 @@ export interface BacktestEntryResult {
   entryTs: number;
   daysHeld: number;
   predictedNetUsdH: number;
+  predictedGrossUsdH: number;
+  predictedLvrUsdH: number;
   realizedNetUsd: number;
   realizedNetUsdH: number; // scaled to the horizon for comparability
   /**
@@ -231,6 +235,33 @@ export function runBacktest(
     return Math.max(Math.sqrt(v * 31_536_000), floor);
   };
 
+  // Empirical in-range fraction (NO lookahead): walk trailing ticks under a
+  // recenter-on-exit policy and measure the fraction of steps the position
+  // would have been in range. Real paths mean-revert/stick far more than GBM,
+  // so this corrects the model's ~2x over-credit of emission capture.
+  const etaWindowSteps = Math.max(8, Math.round((7 * 24) / stepHours));
+  const inRangeEmpiricalAt = (tp: TrackedPool, i: number, mEff: number): number => {
+    const hwTicks = Math.log(mEff) / LN_TICK; // band half-width in ticks
+    if (!(hwTicks > 0)) return 1;
+    const start = Math.max(0, i - etaWindowSteps);
+    let center: number | null = null;
+    let inRange = 0;
+    let total = 0;
+    for (let j = start; j <= i; j++) {
+      const s = sampleAt(tp, j);
+      if (!s) continue;
+      if (center === null) {
+        center = s.tick;
+        continue;
+      }
+      total++;
+      if (Math.abs(s.tick - center) <= hwTicks) inRange++;
+      else center = s.tick; // recenter on exit (rate limits ignored: 1st-order)
+    }
+    if (total < 4) return NaN; // too little history — caller keeps GBM eta
+    return inRange / total;
+  };
+
   const feeRateAt = (tp: TrackedPool, i: number, pricing: PoolPricing) => {
     const now = sampleAt(tp, i);
     const past = sampleAt(tp, i - feeWindowSteps);
@@ -286,6 +317,14 @@ export function runBacktest(
           : null,
         aero,
         vol: { annual: vol, source: "local_samples", confidence: "medium", samples: volWindowSteps },
+        // Empirical in-range fraction: OPT-IN only. A/B over dense-data
+        // windows showed it improves level-calibration but DEGRADES ranking
+        // and profit (it steers off the tight-band emission carry where
+        // prediction is actually good). GBM eta wins on trustworthy data, so
+        // it stays the default; the empirical path remains for experiments.
+        inRangeFor: process.env.EMP_ETA
+          ? (mEff: number) => inRangeEmpiricalAt(tp, i, mEff)
+          : undefined,
         cfg,
         gas,
       });
@@ -361,6 +400,8 @@ export function runBacktest(
       entryTs: p.entryTs,
       daysHeld,
       predictedNetUsdH: p.predictedNetUsdH,
+      predictedGrossUsdH: p.predictedGrossUsdH,
+      predictedLvrUsdH: p.predictedLvrUsdH,
       realizedNetUsd: net,
       realizedNetUsdH: (net / daysHeld) * H,
       realizedAlphaUsd: alpha,
@@ -405,6 +446,8 @@ export function runBacktest(
       entryIdx: i,
       entryTs: hist.tsForBlock(hist.blocks[i]!),
       predictedNetUsdH: sc.choice.netUsdHorizon,
+      predictedGrossUsdH: sc.choice.grossUsdHorizon,
+      predictedLvrUsdH: sc.choice.lvrUsdHorizon,
       feesUsd: 0,
       pendingAero: 0,
       emissionsUsd: 0,

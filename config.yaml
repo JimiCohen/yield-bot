@@ -96,7 +96,7 @@ scoring:
   # there that a ±0.5% floor was structurally blind to.
   width_grid:
     min_mult: 1.0001
-    max_mult: 2.0
+    max_mult: 1.012
     steps: 64
 
 volatility:
