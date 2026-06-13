@@ -59,6 +59,22 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## REGIME GATE BUILT & LIVE (2026-06-13 night)
+Turned the regime finding into an automated gate (commit). `src/scoring/regime.ts`
++ config.regime {enabled, baseline_lookback_days 150, min_ratio 0.6,
+max_staleness_hours 48}. Rule: deploy a pool only if its current emission APY
+>= 0.6x its own trailing-150d DefiLlama median; else STAND DOWN. Wired into
+viableScores (optional predicate) → enforced in BOTH paper monitor and live
+cycle (real money only deploys in favorable regimes). Baseline cached to
+data/regime-baseline.json, auto-refreshes when stale. Fails OPEN on
+missing/stale/unmapped data (it's an enhancement, not a safety gate). Velodrome
+config has it disabled (UUIDs Base-only). `npm run regime` shows current
+decision + month-by-month no-lookahead validation. Validated: deploys in high
+months, stands down in documented low-carry months (~9/12 for blue chips); all
+4 pools favorable NOW (ratios 1.5-3.3) so current profitable behavior preserved.
+Dashboard+paper restarted on this code. NEXT (still): archive RPC key →
+granular multi-month net-alpha backtest; let clean paper ledger fill.
+
 ## REGIME DATA (2026-06-13 night) — 11 MONTHS via DefiLlama (`npm run regime`)
 Granular state months back is blocked (tested 13 public RPCs — ALL prune state;
 needs a keyed archive endpoint). But DefiLlama yields gives ~11 months of daily
