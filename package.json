@@ -27,6 +27,7 @@
     "residuals": "tsx src/sim/residuals.ts",
     "regime": "tsx src/sim/regime.ts",
     "progress": "tsx src/sim/progress.ts",
+    "test-alert": "tsx src/sim/testAlert.ts",
     "cadence-sweep": "tsx src/sim/cadenceSweep.ts"
   },
   "dependencies": {

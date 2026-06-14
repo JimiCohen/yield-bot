@@ -1,3 +1,4 @@
+import "../config/env.js"; // load .env first (archive RPC, telegram, key)
 import { existsSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { loadConfig } from "../config/load.js";

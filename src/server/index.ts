@@ -1,3 +1,4 @@
+import "../config/env.js"; // load .env first (archive RPC, telegram, key)
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
