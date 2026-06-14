@@ -59,6 +59,23 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## MONITORING (2026-06-13 latest)
+- `npm run progress`: read-only gate report (exact hold-time-weighted gate math
+  + fill-rate ETA + per-pool P&L). Exit 0=green / 10=working. Current: 4/8
+  trades, LIVE accuracy 41% (need 70%), ratio ~1.0. LIVE accuracy running well
+  below backtest (60-74%) — watch this; small sample but a live-vs-backtest gap
+  signal. The live paper ledger is the authoritative judge.
+- Monitor cycle logs a GATE line each cycle and fires a ONE-SHOT alert (existing
+  Alerts/Telegram; logs if unconfigured) when it turns green — marker
+  data/.gate-green (gitignored), delete to re-arm. No external scheduler.
+- For a phone ping: set Telegram per GO-LIVE.md step 4 → the running bot pushes
+  the gate-green alert (and all live trade alerts) automatically.
+- launchd daily macOS notification was NOT installed (auto-mode blocked system
+  persistence) — offer it as an explicit opt-in if the user wants it.
+- Local paper bot is the authoritative gate (current code). VPS still runs
+  pre-regime-gate code → its ledger is NOT comparable; update it (git pull +
+  rebuild) or treat local as canonical.
+
 ## GRANULARITY CHECK (2026-06-13 latest) — the 6h PASS was NOT robust
 Re-ran at realistic 2h step (live checks at 15min, even finer): 60d nets +$570
 (still profitable) but validation = WARN: sign agreement 67% (<70%), ratio 0.22
