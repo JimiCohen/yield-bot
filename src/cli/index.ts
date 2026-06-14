@@ -1,3 +1,5 @@
+import { existsSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { loadConfig } from "../config/load.js";
 import { makeClient } from "../chain/client.js";
 import { Store } from "../data/store.js";
@@ -570,6 +572,33 @@ async function cmdMonitor(configPath: string, args: string[]) {
       }
     } else {
       console.log(`  (set ${cfg.wallet.address_env} to monitor on-chain positions)`);
+    }
+
+    // --- validation-gate watch: one-shot alert the moment it turns green ----
+    // Rides this already-running process (no extra scheduler). A marker file
+    // makes it fire exactly once; deleting the marker re-arms it.
+    {
+      const v = store.getValidationStats();
+      const e2 = cfg.execution;
+      const green =
+        v.entries >= e2.validation_min_entries &&
+        v.signAgreement >= e2.validation_min_sign_agreement &&
+        Number.isFinite(v.meanRatio) &&
+        v.meanRatio >= e2.validation_ratio_min &&
+        v.meanRatio <= e2.validation_ratio_max;
+      const marker = `${dirname(cfg.db.path)}/.gate-green`;
+      console.log(
+        `  GATE: ${v.entries}/${e2.validation_min_entries} trades · accuracy ${(v.signAgreement * 100).toFixed(0)}% (need ${e2.validation_min_sign_agreement * 100}%) · ` +
+          `ratio ${Number.isFinite(v.meanRatio) ? v.meanRatio.toFixed(2) : "n/a"} · ${green ? "🟢 GREEN" : "locked"}`,
+      );
+      if (green && !existsSync(marker)) {
+        writeFileSync(marker, new Date().toISOString());
+        await alerts.critical(
+          `🟢 VALIDATION GATE GREEN — strategy validated on live paper ` +
+            `(${v.entries} trades, ${(v.signAgreement * 100).toFixed(0)}% accuracy, ${v.meanRatio.toFixed(2)}x). ` +
+            `Real money can now be unlocked per GO-LIVE.md (first deploy capped $${cfg.position.max_position_usd ?? "?"}).`,
+        );
+      }
     }
   };
 
