@@ -12,6 +12,13 @@ services:
   bot:
     build: .
     restart: unless-stopped
+    # Optional secrets/config for the container (TELEGRAM_BOT_TOKEN,
+    # TELEGRAM_CHAT_ID, BASE_ARCHIVE_RPC, and later BOT_PRIVATE_KEY for live).
+    # Create a .env next to this file on the server; it is gitignored and never
+    # baked into the image. required:false so the deploy works without it.
+    env_file:
+      - path: .env
+        required: false
     environment:
       AUTO_START_PAPER: "1"
       # Bind to all interfaces INSIDE the container; only published to the
