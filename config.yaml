@@ -158,7 +158,7 @@ position:
 regime:
   enabled: true
   baseline_lookback_days: 150  # trailing window for the "normal" emission level
-  min_ratio: 0.6               # deploy only if current emissions >= 0.6x that baseline
+  min_ratio: 0.45               # deploy only if current emissions >= 0.45x that baseline
   max_staleness_hours: 48      # ignore the gate if the baseline cache is older than this
 
 # --- Anti-over-rebalancing gates (Phase 5) -------------------------------
