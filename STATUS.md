@@ -72,9 +72,15 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
   the gate-green alert (and all live trade alerts) automatically.
 - launchd daily macOS notification was NOT installed (auto-mode blocked system
   persistence) — offer it as an explicit opt-in if the user wants it.
-- Local paper bot is the authoritative gate (current code). VPS still runs
-  pre-regime-gate code → its ledger is NOT comparable; update it (git pull +
-  rebuild) or treat local as canonical.
+- Local paper bot is the authoritative gate (current code).
+- VPS UPDATED 2026-06-15 (via Hostinger web terminal, browser automation):
+  srv1752673/2.25.203.19 fast-forwarded dabc3d2→c9c618d, .env written with
+  BASE_ARCHIVE_RPC, `docker compose -f docker-compose.paper.yml up -d --build`,
+  old ledger quarantined (52 rows → paper_entries_quarantined, 1 open position
+  abandoned). Container yield-bot-bot-1 running latest code, paper 0/8 clean,
+  forward-testing the validated config in parallel. (Telegram creds NOT on VPS
+  yet — add to /root/yield-bot/.env + recreate container to enable phone pings
+  from the cloud bot.)
 
 ## GRANULARITY CHECK (2026-06-13 latest) — the 6h PASS was NOT robust
 Re-ran at realistic 2h step (live checks at 15min, even finer): 60d nets +$570
