@@ -174,7 +174,12 @@ rebalance:
   deadband_fraction: 0.25     # price must exceed range edge by 25% of width
   sustain_minutes: 0          # at 5-min checks the cadence IS the sustain
   net_benefit_margin: 3.0     # projected gain must be >= 3x full move cost
-  min_hold_minutes: 120       # no exit/switch before this age (risk bypasses)
+  min_hold_minutes: 1440      # 24h: emission carry needs day+ holds. 120min let
+                              # the live bot CHURN at the boundary (9 live trades
+                              # all ~2-4h holds → round-trip costs, no accrual,
+                              # noise-dominated alpha). Rebalance/recenter and
+                              # risk-exit still bypass this; only discretionary
+                              # exit/switch wait. (Recenter & risk are unaffected.)
   switch_margin: 4.0          # pool switches need a stricter margin
   max_rebalances_per_day: 48
   timing_jitter_minutes: 1    # never fire on an exactly predictable schedule
