@@ -59,6 +59,23 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## DEEP BACKTEST — FULL YEAR (2026-06-15, archive RPC)
+Contiguous 180/270/365d ALL PASS @6h (71-72% sign, ratio 0.75-0.81, ~+$534
+net — note net flat across lengths = idle most of the year, profit concentrated
+in favorable windows). 10×30d monthly sweep (each fresh $1,500):
+- Regime ON: 8/10 months positive, SUM +$1,990, worst -$57, pooled sign 64%.
+- Regime OFF: 9/10 positive, SUM +$2,392, worst -$190, pooled sign 62%.
+TAKEAWAYS (honest): (1) PROFIT IS ROBUST across the whole year incl. older
+months the tuning never saw (blue-chips only, SOL didn't exist <60d ago) — NOT
+just the recent spike. (2) The regime gate is RISK MGMT, not free money: cuts
+worst-month drawdown ~3x but costs ~$400/yr upside (min_ratio 0.6 may be a bit
+aggressive — candidate to relax, but DON'T overfit; let live inform it).
+(3) PER-TRADE ACCURACY is consistently ~62-65%/month both ways — BELOW the 70%
+gate; the contiguous-year 71% PASS is a single-path concentration artifact.
+(4) Granularity caveat stands: 6h passes, 2h WARNs (67%), LIVE paper 41%.
+NET: profitability case is now strong + year-robust; prediction-reliability
+(the gate) is the genuine open question — live ledger is the arbiter.
+
 ## MONITORING (2026-06-13 latest)
 - `npm run progress`: read-only gate report (exact hold-time-weighted gate math
   + fill-rate ETA + per-pool P&L). Exit 0=green / 10=working. Current: 4/8

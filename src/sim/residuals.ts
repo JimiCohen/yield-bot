@@ -35,6 +35,11 @@ const WINDOWS = [
   { label: "m2 (60-90d)", days: 30, endDaysAgo: 60 },
   { label: "m3 (90-120d)", days: 30, endDaysAgo: 90 },
   { label: "m4 (120-150d)", days: 30, endDaysAgo: 120 },
+  { label: "m5 (150-180d)", days: 30, endDaysAgo: 150 },
+  { label: "m6 (180-210d)", days: 30, endDaysAgo: 180 },
+  { label: "m7 (210-240d)", days: 30, endDaysAgo: 210 },
+  { label: "m8 (240-270d)", days: 30, endDaysAgo: 240 },
+  { label: "m9 (270-300d)", days: 30, endDaysAgo: 270 },
 ];
 const STEP_OVERRIDE = 6; // hours; coarser keeps the deep sweep within RPC budget
 const STEP_HOURS = STEP_OVERRIDE;
