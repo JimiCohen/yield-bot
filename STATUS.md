@@ -59,6 +59,26 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## REGIME TUNE + LIVE CHURN FIX (2026-06-15 latest)
+- `npm run regime-sweep`: TRAIN(recent m0-m4)/HELD-OUT(older m5-m9) split. 0.60
+  was OVERFIT (best recent worst-month but poor on held-out, +$586, a -$33
+  month). Relaxed min_ratio 0.60→0.45: robust on BOTH halves (held-out +$900,
+  66% acc, no losing month). Contiguous 365d still PASSES (71%, ratio 0.59).
+- LIVE LEDGER hit 9 trades → exposed CHURN: every live hold ~2-4h (at the old
+  120min min_hold boundary). "31% acc / -0.51 ratio" was mostly short-hold
+  ANNUALIZATION NOISE (entry #24: +$2.04 P&L but -861 annualized alpha on 1.8h),
+  not a broken model — but the bot wasn't holding long enough to earn emission
+  carry. FIX: min_hold_minutes 120→1440 (24h). Backtest 90d still PASSES (72%,
+  29 vs 47 trades, 40% lower costs). Recenter & risk-exit still bypass min_hold.
+  Live ledger now re-accumulating with day+ holds; hold-time weighting
+  down-weights the old churn entries. WATCH whether live acc climbs now.
+- NOTE: live bot was concentrating in WETH/cbBTC (6/9 trades, the low-emission
+  correlated pair) rather than the high-emission SOL/USDC the backtest favors —
+  worth investigating if live acc stays low after the churn fix (possible
+  live-scan vs backtest scoring discrepancy).
+- VPS still on min_ratio 0.60 / min_hold 120 (pulled before these commits) —
+  re-pull + rebuild to match, or treat local as canonical.
+
 ## DEEP BACKTEST — FULL YEAR (2026-06-15, archive RPC)
 Contiguous 180/270/365d ALL PASS @6h (71-72% sign, ratio 0.75-0.81, ~+$534
 net — note net flat across lengths = idle most of the year, profit concentrated
