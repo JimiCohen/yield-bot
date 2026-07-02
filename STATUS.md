@@ -59,6 +59,24 @@ README.md, docs/MODELS.md, SECURITY.md, GO-LIVE.md, DEPLOY.md.
 - **Repo:** https://github.com/JimiCohen/yield-bot (PUBLIC — verified
   no secrets; push needs `gh auth setup-git` once per machine).
 
+## LIVE FORWARD-TEST VERDICT (2026-07-02) — FAILED. DO NOT FUND.
+~3 weeks of live paper (the unfoolable judge): **18 trades, 18% prediction
+accuracy (need 70%), realized P&L ≈ −$128 on $1,500.** The churn fix did NOT
+close the backtest-vs-live gap. Post-fix day-long holds show the WINNER'S CURSE
+signature: the LARGEST predictions failed worst (pred +$683/wk → alpha −$553;
++$380 → −$505; +$231 → −$122) while small predictions were ~fine — argmax over
+noisy NEY estimates systematically selects the most over-estimated cell. The
+backtest is flattered because it accrues emissions/fees with the SAME share
+model it predicts with (correlated errors); live accrual is real on-chain
+deltas. Legitimate vol-spike risk exits also bypassed min_hold (correct
+behavior). Ops note: the bot DIED in a reboot (~Jun 18) and position #34 sat
+unmanaged 13 days → −$44 of the loss is an ops failure (no persistence; launchd
+was auto-blocked earlier — needs explicit user opt-in).
+CONCLUSION: strategy as built has NO validated real-money edge. Candidate next
+research (NOT promises): shrinkage/uncertainty penalty before argmax to kill
+the winner's curse; score-vs-realized calibration from the live ledger itself.
+The gate stays locked — that is the system working.
+
 ## REGIME TUNE + LIVE CHURN FIX (2026-06-15 latest)
 - `npm run regime-sweep`: TRAIN(recent m0-m4)/HELD-OUT(older m5-m9) split. 0.60
   was OVERFIT (best recent worst-month but poor on held-out, +$586, a -$33
