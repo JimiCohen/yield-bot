@@ -1,8 +1,27 @@
 # Project Status — read me first in any new session
 
-_Last updated: 2026-06-12 (evening — accounting-bug fix sprint). This file is
-the single source of truth for "where are we" — update it whenever something
-material changes._
+_Last updated: 2026-07-03. This file is the single source of truth for
+"where are we" — update it whenever something material changes._
+
+## ⭐ PARK+GUARD ALLOCATOR — THE HONEST STRATEGY (2026-07-03, WORKING)
+Built src/allocator/ (venues/paper/live) after the CL strategy failed live
+(see verdict below) and deep-research verified honest yield = 3-6%. Design
+from a 365d simulation on real posted rates: rotation adds only ~$2/yr over
+parking → PARK in the best audited venue + GUARD it (G1 better-venue
+0.75pp/5 checks, G2 TVL-drain 30%/7d, G3 accrual-stall 48h). Accounting =
+ON-CHAIN accrual index (ERC4626 convertToAssets 1e24 probe / Aave normalized
+income) — measured truth, zero prediction, winner's curse impossible.
+VERIFIED WORKING: paper parked $1,500 in Steakhouse Prime USDC (Morpho,
+$228M TVL); first 2 minutes accrued +$0.0002 = measured 3.93%/yr from pure
+on-chain share-price growth (advertised 4.24%). Guard watcher running hourly
+(`npm run allocate -- --watch`, logs/allocator.out).
+LIVE PATH BUILT + GATED: `allocate --deposit N --live` / `--withdraw --live`
+(two-key: config mode live AND --live flag; code gate requires >=7 days of
+MEASURED positive paper accrual — verified to refuse now; caps:
+allocator.capital_usd AND position.max_position_usd; exact approvals only).
+Expected: ~$60/yr on $1,500 — small, real, deterministic. First REAL dollar
+needs only user steps: dedicated wallet + USDC on Base + BOT_PRIVATE_KEY in
+.env + mode: live, once the gate opens (~Jul 10).
 
 ## LATEST: the 20–23% "accuracy" was a measurement bug, now fixed
 Diagnosis of the ledger found THREE defects that made validation garbage-in:
