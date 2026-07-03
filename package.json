@@ -29,7 +29,8 @@
     "regime-sweep": "tsx src/sim/regimeSweep.ts",
     "progress": "tsx src/sim/progress.ts",
     "test-alert": "tsx src/sim/testAlert.ts",
-    "cadence-sweep": "tsx src/sim/cadenceSweep.ts"
+    "cadence-sweep": "tsx src/sim/cadenceSweep.ts",
+    "allocate": "tsx src/cli/index.ts allocate"
   },
   "dependencies": {
     "better-sqlite3": "^11.10.0",

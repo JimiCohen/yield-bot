@@ -258,6 +258,71 @@ async function cmdScore(configPath: string) {
   store.close();
 }
 
+async function cmdAllocate(configPath: string, args: string[]) {
+  const cfg = loadConfig(configPath);
+  const client = makeClient(cfg);
+  const store = new Store(cfg.db.path);
+  const alerts = new Alerts(cfg);
+  const watch = args.includes("--watch");
+  const { runAllocCycle } = await import("../allocator/paper.js");
+
+  // --- LIVE subcommands (two-key: mode live in config AND --live flag) -----
+  const depositFlag = args.indexOf("--deposit");
+  if (depositFlag >= 0 || args.includes("--withdraw")) {
+    if (cfg.mode !== "live" || !args.includes("--live")) {
+      throw new Error("live allocator actions need config mode: live AND the --live flag (two-key safety)");
+    }
+    const { liveDeposit, liveWithdrawAll, VENUES } = await import("../allocator/live.js");
+    const { ensureAllocTables } = await import("../allocator/paper.js");
+    ensureAllocTables(store.db);
+    const venueKey = (() => {
+      const i = args.indexOf("--venue");
+      if (i >= 0) return args[i + 1];
+      const st = store.db.prepare("SELECT venue FROM alloc_state WHERE id=1").get() as { venue: string } | undefined;
+      return st?.venue; // default: wherever the paper allocator is parked
+    })();
+    const venue = VENUES.find((v) => v.key === venueKey);
+    if (!venue) throw new Error(`unknown venue "${venueKey}" — use --venue <${VENUES.map((v) => v.key).join("|")}>`);
+    if (depositFlag >= 0) {
+      const usd = Number(args[depositFlag + 1]);
+      if (!(usd > 0)) throw new Error("--deposit needs a positive USD amount");
+      const hash = await liveDeposit(cfg, client, store.db, venue, usd, (m) => console.log("  " + m));
+      await alerts.critical(`ALLOCATOR LIVE DEPOSIT $${usd} -> ${venue.name} (${hash})`);
+    } else {
+      const hash = await liveWithdrawAll(cfg, client, venue, (m) => console.log("  " + m));
+      await alerts.critical(`ALLOCATOR LIVE WITHDRAW ALL from ${venue.name} (${hash})`);
+    }
+    store.close();
+    return;
+  }
+
+  const runOnce = async () => {
+    const r = await runAllocCycle(cfg, client, store.db, (m) => console.log("  " + m));
+    const eff = r.impliedAprPct;
+    console.log(
+      `[${new Date().toISOString()}] PARK ${r.venue.name}` +
+        ` | value $${r.valueUsd.toFixed(4)} (P&L ${r.pnlUsd >= 0 ? "+" : ""}$${r.pnlUsd.toFixed(4)})` +
+        ` | measured ${eff === null ? "n/a (first snapshot)" : eff.toFixed(2) + "%/yr"}` +
+        ` | advertised ${r.advertisedApy?.toFixed(2) ?? "?"}%`,
+    );
+    for (const a of r.alerts) {
+      console.log(`  ⚠ ${a}`);
+      await alerts.critical(`ALLOCATOR ${a}`);
+    }
+    if (r.switched) await alerts.critical(`ALLOCATOR switched venue -> ${r.venue.key}`);
+  };
+
+  await runOnce();
+  if (watch) {
+    // Yield accrues per block; hourly checks are plenty. Guards need no more.
+    const interval = 60 * 60_000;
+    console.log(`\nGuarding (hourly checks). Ctrl-C to stop.`);
+    setInterval(() => runOnce().catch((e) => console.error("alloc check failed:", e instanceof Error ? e.message : e)), interval);
+  } else {
+    store.close();
+  }
+}
+
 async function cmdBacktest(configPath: string, args: string[]) {
   const cfg = loadConfig(configPath);
   const daysFlag = args.indexOf("--days");
@@ -842,6 +907,12 @@ switch (command) {
   case "discover":
     cmdDiscover().catch((e) => {
       console.error("discover failed:", e instanceof Error ? e.message : e);
+      process.exit(1);
+    });
+    break;
+  case "allocate":
+    cmdAllocate(configPath, rest).catch((e) => {
+      console.error("allocate failed:", e instanceof Error ? e.message : e);
       process.exit(1);
     });
     break;

@@ -113,6 +113,23 @@ export const configSchema = z.object({
     max_position_usd: z.number().positive().optional(),
   }),
 
+  // PARK+GUARD allocator (src/allocator/): audited single-asset USDC venues,
+  // on-chain-index accounting, guard alerts. The honest-yield strategy.
+  allocator: z.object({
+    capital_usd: z.number().positive(),
+    // G1: switch only if an alternative's advertised BASE apy beats current by
+    // this many percentage points, sustained this many consecutive checks.
+    switch_threshold_pp: z.number().positive(),
+    switch_sustain_checks: z.number().int().positive(),
+    auto_switch: z.boolean(),
+    move_cost_usd: z.number().nonnegative(),
+    // G2: alert if venue TVL falls this fraction below its trailing-window max.
+    tvl_drain_fraction: z.number().gt(0).lt(1),
+    tvl_window_days: z.number().int().positive(),
+    // G3: alert if the on-chain accrual index is flat for this many hours.
+    stall_hours: z.number().positive(),
+  }),
+
   // Emission-regime gate: only deploy into pools whose current emissions clear
   // a fraction of their own trailing baseline (DefiLlama, ~11mo). Rides spikes,
   // stands down when carry fades. Fails OPEN (never freezes the bot on missing

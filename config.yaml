@@ -150,6 +150,22 @@ position:
   max_position_usd: 200    # HARD per-position ceiling for LIVE (first-trade safety;
                            # clamps every live entry regardless of wallet/optimizer)
 
+# --- PARK+GUARD allocator (the honest-yield strategy) ---------------------
+# Verified 2026-07 research: organic USDC yield on Base is 3-6%; a 365d
+# simulation showed rotating venues adds ~$2/yr over parking in the best
+# vault. So: park in the best audited venue, verify accrual from the ON-CHAIN
+# index every cycle (truth, not advertised APY), and alert/move only if the
+# venue degrades. Nothing is predicted.
+allocator:
+  capital_usd: 1500
+  switch_threshold_pp: 0.75    # alt must beat current by 0.75pp...
+  switch_sustain_checks: 5     # ...for 5 consecutive checks (guards vs blips)
+  auto_switch: true            # paper: switch automatically; live asks too
+  move_cost_usd: 0.10          # Base gas is cents; same-asset, no swaps
+  tvl_drain_fraction: 0.30     # alert if TVL 30% under trailing peak
+  tvl_window_days: 7
+  stall_hours: 48              # alert if on-chain index flat 48h
+
 # --- Emission-regime gate ------------------------------------------------
 # 11 months of DefiLlama history show emission carry is volatile + mean-
 # reverting; the strategy bleeds in low-emission months. This gate RIDES

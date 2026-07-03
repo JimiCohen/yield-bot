@@ -98,6 +98,19 @@ position:
 
 # Regime gate off for Velodrome until DefiLlama pool UUIDs are mapped for
 # Optimism pairs (src/scoring/regime.ts UUID map is Base/Aerodrome only).
+
+# Allocator (schema-required; venue registry is Base-only, so keep it parked
+# off on this venue — the Base config is where the allocator runs).
+allocator:
+  capital_usd: 1500
+  switch_threshold_pp: 0.75
+  switch_sustain_checks: 5
+  auto_switch: false
+  move_cost_usd: 0.10
+  tvl_drain_fraction: 0.30
+  tvl_window_days: 7
+  stall_hours: 48
+
 regime:
   enabled: false
   baseline_lookback_days: 150

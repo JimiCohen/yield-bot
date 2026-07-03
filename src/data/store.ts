@@ -70,7 +70,8 @@ function rowToPaperPosition(r: Record<string, unknown>): PaperPositionRow {
  * predicted-vs-realized yield ledger.
  */
 export class Store {
-  private db: Database.Database;
+  /** exposed for modules that manage their own tables (src/allocator) */
+  readonly db: Database.Database;
 
   constructor(path: string) {
     mkdirSync(dirname(path), { recursive: true });
