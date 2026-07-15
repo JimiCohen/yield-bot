@@ -3,6 +3,24 @@
 _Last updated: 2026-07-03. This file is the single source of truth for
 "where are we" — update it whenever something material changes._
 
+## ⭐ ALLOCATOR IMPROVEMENT SPRINT (2026-07-15) — GATE NOW OPEN
+12 days parked in Steakhouse Prime: **+$1.97, measured 4.07%/yr steady
+(2h=24h=7d windows) — the allocator's own live gate is OPEN.** Improvements:
+- Venues 4→7 (+Fluid 5.3%, Spark Vault, bbq tier-3) with RISK TIERS
+  (max_tier=2 default) + $5M TVL floor; all 7 verified on-chain.
+- Guards: G2 drain now ON-CHAIN totalAssets first (caught two of my own wrong
+  llama uuids — advisory TVL was a different share class, 60% off); G4 USDC
+  depeg (<0.99 advisory); G5 yield-divergence (measured < 40% of advertised).
+- LIVE-AWARENESS + AUTO-FLEE: when key present + mode live, guard reads the
+  REAL wallet position and auto-withdraws to wallet on drain/stall
+  (allocator.auto_flee: true).
+- OPS: allocator is a dashboard-supervised task (AUTO_START_ALLOCATOR=1, also
+  in Dockerfile) — reboot-orphan failure mode closed. Dashboard 'Honest yield'
+  card + /api/allocator + `allocate --report`.
+- Remaining for first real dollar (user-only): wallet + USDC on Base +
+  BOT_PRIVATE_KEY in .env + mode: live → `allocate --deposit N --live`.
+- VPS: re-pull + rebuild to get allocator container-supervised there too.
+
 ## ⭐ PARK+GUARD ALLOCATOR — THE HONEST STRATEGY (2026-07-03, WORKING)
 Built src/allocator/ (venues/paper/live) after the CL strategy failed live
 (see verdict below) and deep-research verified honest yield = 3-6%. Design
