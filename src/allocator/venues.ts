@@ -21,6 +21,12 @@ export interface Venue {
   /** vault address for erc4626; Pool address for aave */
   address: `0x${string}`;
   llamaPool: string; // DefiLlama pool uuid (advisory APY + TVL)
+  /** Risk tier: 1 = blue-chip ($100M+ TVL, top curator/protocol);
+   *  2 = solid but smaller/newer; 3 = higher-yield risk markets.
+   *  The allocator only parks in tiers <= allocator.max_tier. */
+  tier: 1 | 2 | 3;
+  /** aToken address (aave-v3 only) — lets G2 read real on-chain TVL. */
+  aToken?: `0x${string}`;
 }
 
 export const USDC_BASE = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" as const;
@@ -32,13 +38,15 @@ export const VENUES: Venue[] = [
     kind: "erc4626",
     address: "0xeE8F4eC5672F09119b96Ab6fB59C27E1b7e44b61",
     llamaPool: "e0672197-9f3e-4414-bca5-e6b4c90aa469",
+    tier: 1,
   },
   {
     key: "steakprime",
     name: "Steakhouse Prime USDC (Morpho)",
     kind: "erc4626",
     address: "0xBEEFE94c8aD530842bfE7d8B397938fFc1cb83b2",
-    llamaPool: "ba68527f-8ec2-4c55-827a-8f4673ae047c",
+    llamaPool: "7820bd3c-461a-4811-9f0b-1d39c1503c3f",
+    tier: 1,
   },
   {
     key: "mwflagship",
@@ -46,6 +54,7 @@ export const VENUES: Venue[] = [
     kind: "erc4626",
     address: "0xc1256Ae5FF1cf2719D4937adb3bbCCab2E00A2Ca",
     llamaPool: "b39b492a-0a64-4926-8598-d5acf05d62b5",
+    tier: 2,
   },
   {
     key: "aave",
@@ -53,6 +62,34 @@ export const VENUES: Venue[] = [
     kind: "aave-v3",
     address: "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5",
     llamaPool: "7e0661bf-8cf3-45e6-9424-31916d4c7b84",
+    tier: 1,
+    aToken: "0x4e65fE4DbA92790696d040ac24Aa414708F5c0AB", // aBasUSDC (verified via totalSupply read at startup)
+  },
+  {
+    key: "fluid",
+    name: "Fluid USDC (Base)",
+    kind: "erc4626",
+    // fToken from Fluid's own API (asset == USDC, ERC4626-compliant); the
+    // on-chain asset() check below re-verifies every cycle before use.
+    address: "0xf42f5795D9ac7e9D757dB633D693cD548Cfd9169",
+    llamaPool: "7372edda-f07f-4598-83e5-4edec48c4039",
+    tier: 2, // organic 5%+ but ~$8.5M TVL — smaller pool, rate compresses with inflows
+  },
+  {
+    key: "sparkvault",
+    name: "Spark USDC Vault (Morpho)",
+    kind: "erc4626",
+    address: "0x7BfA7C4f149E7415b73bdeDfe609237e29CBF34A",
+    llamaPool: "a5fab52f-73fa-4f44-9c09-9af1eb20996c",
+    tier: 2,
+  },
+  {
+    key: "bbqusdc",
+    name: "Steakhouse High Yield USDC (Morpho)",
+    kind: "erc4626",
+    address: "0xBEEFA7B88064FeEF0cEe02AAeBBd95D30df3878F",
+    llamaPool: "bf346d43-ef94-4277-b159-ebadb93caef1",
+    tier: 3, // "High Yield" = riskier collateral markets; excluded at default max_tier
   },
 ];
 
@@ -102,7 +139,34 @@ export async function readVenue(client: ChainClient, v: Venue): Promise<VenueRea
     functionName: "getReserveNormalizedIncome",
     args: [USDC_BASE],
   })) as bigint;
-  return { key: v.key, index: income / 10n ** 9n, verified: income > 10n ** 26n, totalAssetsUsd: null };
+  // Real TVL from the aToken supply (G2 drain detection without the API).
+  let tvl: number | null = null;
+  if (v.aToken) {
+    try {
+      const supply = (await client.readContract({
+        address: v.aToken,
+        abi: [{ name: "totalSupply", type: "function", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] }] as const,
+        functionName: "totalSupply",
+      })) as bigint;
+      tvl = Number(supply) / 1e6;
+    } catch {
+      tvl = null; // wrong/changed aToken → fail open, advisory covers it
+    }
+  }
+  return { key: v.key, index: income / 10n ** 9n, verified: income > 10n ** 26n, totalAssetsUsd: tvl };
+}
+
+/** USDC/USD price (advisory, coins.llama.fi). null on failure — fail open. */
+export async function fetchUsdcPrice(): Promise<number | null> {
+  try {
+    const r = await fetch(`https://coins.llama.fi/prices/current/base:${USDC_BASE}`, {
+      signal: AbortSignal.timeout(15_000),
+    });
+    const j = (await r.json()) as { coins: Record<string, { price: number }> };
+    return j.coins[`base:${USDC_BASE}`]?.price ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Advisory rates (advertised apyBase + TVL) from DefiLlama — signal only. */

@@ -117,6 +117,11 @@ export const configSchema = z.object({
   // on-chain-index accounting, guard alerts. The honest-yield strategy.
   allocator: z.object({
     capital_usd: z.number().positive(),
+    // Eligibility: only park/switch into venues at or below this risk tier
+    // (1 = blue-chip, 2 = solid smaller, 3 = higher-yield risk markets) and
+    // above this TVL floor.
+    max_tier: z.number().int().min(1).max(3),
+    min_venue_tvl_usd: z.number().nonnegative(),
     // G1: switch only if an alternative's advertised BASE apy beats current by
     // this many percentage points, sustained this many consecutive checks.
     switch_threshold_pp: z.number().positive(),
@@ -128,6 +133,11 @@ export const configSchema = z.object({
     tvl_window_days: z.number().int().positive(),
     // G3: alert if the on-chain accrual index is flat for this many hours.
     stall_hours: z.number().positive(),
+    // G4: alert if USDC/USD advisory price falls below this.
+    depeg_alert_price: z.number().gt(0.5).lt(1),
+    // Live only: on danger guards (TVL_DRAIN / ACCRUAL_STALL), automatically
+    // withdraw real funds back to the wallet.
+    auto_flee: z.boolean(),
   }),
 
   // Emission-regime gate: only deploy into pools whose current emissions clear

@@ -60,7 +60,7 @@ if (unsafeBind) {
 // Task management: one child per kind, log ring buffers, SSE fan-out.
 // ---------------------------------------------------------------------------
 
-type TaskKind = "paper" | "backtest" | "live";
+type TaskKind = "paper" | "backtest" | "live" | "allocator";
 
 interface Task {
   proc: ChildProcess;
@@ -79,6 +79,8 @@ function taskArgs(kind: TaskKind, body: Record<string, unknown>): string[] {
   switch (kind) {
     case "paper":
       return ["src/cli/index.ts", "monitor", "--watch", ...venue];
+    case "allocator":
+      return ["src/cli/index.ts", "allocate", "--watch", ...venue];
     case "backtest": {
       const days = Number(body.days) > 0 ? Number(body.days) : cfg.backtest.days;
       const args = ["src/cli/index.ts", "backtest", "--days", String(days)];
@@ -226,6 +228,37 @@ const api: Record<string, (url: URL) => unknown> = {
   // The money map: every strategy the platform detected, ranked, with the
   // model's ACCURATE net APR (after losses+costs — never the headline) and
   // a deployability verdict the UI can act on in one click.
+  "/api/allocator": () => {
+    const st = q<Record<string, unknown>>("SELECT * FROM alloc_state WHERE id=1")[0];
+    if (!st) return { active: false };
+    const snaps = q<{ ts: number; onchain_index: string; value_usd: number; advertised_apy: number | null }>(
+      "SELECT ts, onchain_index, value_usd, advertised_apy FROM alloc_snapshots WHERE venue=? ORDER BY ts",
+      st.venue,
+    );
+    const last = snaps[snaps.length - 1];
+    const apr = (hours: number): number | null => {
+      if (!last) return null;
+      const cutoff = last.ts - hours * 3_600_000;
+      const ref = [...snaps].reverse().find((s) => s.ts <= cutoff) ?? snaps[0]!;
+      const dtY = (last.ts - ref.ts) / (365.25 * 86_400_000);
+      if (dtY <= 0) return null;
+      return ((Number(BigInt(last.onchain_index) - BigInt(ref.onchain_index)) / Number(BigInt(ref.onchain_index))) / dtY) * 100;
+    };
+    const spanDays = last && snaps[0] ? (last.ts - snaps[0]!.ts) / 86_400_000 : 0;
+    return {
+      active: true,
+      venue: st.venue,
+      capitalUsd: cfg.allocator.capital_usd,
+      valueUsd: last?.value_usd ?? null,
+      pnlUsd: last ? last.value_usd - cfg.allocator.capital_usd : null,
+      measuredApr24h: apr(24),
+      measuredApr7d: apr(168),
+      advertisedApy: last?.advertised_apy ?? null,
+      spanDays,
+      gateOpen: spanDays >= 7,
+      events: q("SELECT ts, kind, detail FROM alloc_events ORDER BY ts DESC LIMIT 8"),
+    };
+  },
   "/api/opportunities": () => {
     const latest = q<{ b: number }>("SELECT MAX(block) b FROM pool_scores")[0];
     if (!latest?.b) return { opportunities: [], block: null };
@@ -466,5 +499,11 @@ server.listen(cfg.server.port, host, () => {
   if (process.env.AUTO_START_PAPER === "1") {
     const r = startTask("paper", {});
     console.log(`auto-start paper trading: ${r.ok ? "running" : "failed — " + r.error}`);
+  }
+  // The PARK+GUARD allocator guard loop — paper accounting + guards; never
+  // moves real funds by itself unless mode:live AND auto_flee fires.
+  if (process.env.AUTO_START_ALLOCATOR === "1") {
+    const r = startTask("allocator", {});
+    console.log(`auto-start allocator guard: ${r.ok ? "running" : "failed — " + r.error}`);
   }
 });

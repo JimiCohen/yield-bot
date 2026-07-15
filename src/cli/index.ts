@@ -266,6 +266,49 @@ async function cmdAllocate(configPath: string, args: string[]) {
   const watch = args.includes("--watch");
   const { runAllocCycle } = await import("../allocator/paper.js");
 
+  // --- REPORT: measured truth, projections, gate ETA ----------------------
+  if (args.includes("--report")) {
+    const { ensureAllocTables } = await import("../allocator/paper.js");
+    const { VENUES, fetchAdvisoryRates, impliedAprPct } = await import("../allocator/venues.js");
+    ensureAllocTables(store.db);
+    const st = store.db.prepare("SELECT * FROM alloc_state WHERE id=1").get() as Record<string, unknown> | undefined;
+    if (!st) { console.log("No allocation yet — run `npm run allocate` first."); store.close(); return; }
+    const venueKey = st.venue as string;
+    const snaps = store.db
+      .prepare("SELECT ts, onchain_index, value_usd FROM alloc_snapshots WHERE venue=? ORDER BY ts")
+      .all(venueKey) as { ts: number; onchain_index: string; value_usd: number }[];
+    const last = snaps[snaps.length - 1]!;
+    const windowApr = (hours: number): number | null => {
+      const cutoff = last.ts - hours * 3_600_000;
+      const ref = [...snaps].reverse().find((s) => s.ts <= cutoff) ?? snaps[0]!;
+      if (ref.ts >= last.ts) return null;
+      return impliedAprPct({ index: BigInt(ref.onchain_index), ts: ref.ts }, { index: BigInt(last.onchain_index), ts: last.ts });
+    };
+    const spanDays = (last.ts - snaps[0]!.ts) / 86_400_000;
+    const pnl = last.value_usd - cfg.allocator.capital_usd;
+    const bestApr = windowApr(24) ?? windowApr(2) ?? 0;
+    const v = VENUES.find((x) => x.key === venueKey)!;
+    console.log(`\n=== PARK+GUARD — measured truth (${v.name}) ===`);
+    console.log(`parked      $${cfg.allocator.capital_usd} paper for ${spanDays.toFixed(2)} days · value $${last.value_usd.toFixed(4)} (P&L ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(4)})`);
+    console.log(`measured    ${["2h", "24h", "7d"].map((w, i) => `${w}: ${(windowApr([2, 24, 168][i]!) ?? NaN).toFixed(2)}%`).join("  ·  ")}  (on-chain, not advertised)`);
+    const proj = (d: number) => ((cfg.allocator.capital_usd * (bestApr / 100) * d) / 365).toFixed(2);
+    console.log(`projection  $${proj(1)}/day · $${proj(7)}/wk · $${proj(30)}/mo · $${proj(365)}/yr at measured rate`);
+    console.log(`live gate   ${spanDays >= 7 ? "✅ OPEN (7d accrual met)" : `⏳ opens in ${(7 - spanDays).toFixed(1)} days`}`);
+    const adv = await fetchAdvisoryRates(VENUES);
+    console.log(`\nvenues (advertised base APY | tier | TVL):`);
+    for (const x of VENUES) {
+      const a = adv[x.key];
+      console.log(`  ${x.key === venueKey ? "▶" : " "} ${x.key.padEnd(11)} ${a ? a.apyBase.toFixed(2).padStart(5) + "%" : "   ? "}  t${x.tier}  ${a ? "$" + (a.tvlUsd / 1e6).toFixed(1) + "M" : "?"}`);
+    }
+    const events = store.db.prepare("SELECT ts, kind, detail FROM alloc_events ORDER BY ts DESC LIMIT 6").all() as { ts: number; kind: string; detail: string }[];
+    if (events.length) {
+      console.log(`\nrecent events:`);
+      for (const e of events) console.log(`  ${new Date(e.ts).toISOString().slice(0, 16)} ${e.kind}: ${e.detail.slice(0, 90)}`);
+    }
+    store.close();
+    return;
+  }
+
   // --- LIVE subcommands (two-key: mode live in config AND --live flag) -----
   const depositFlag = args.indexOf("--deposit");
   if (depositFlag >= 0 || args.includes("--withdraw")) {

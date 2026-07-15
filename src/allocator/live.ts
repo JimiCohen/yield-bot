@@ -117,6 +117,33 @@ export async function liveDeposit(
   return hash;
 }
 
+/** Real wallet position value in a venue, in USD (null if none / unreadable). */
+export async function readLivePositionUsd(
+  cfg: Config,
+  client: ChainClient,
+  venue: Venue,
+): Promise<number | null> {
+  const signer = makeSigner(cfg);
+  if (venue.kind === "erc4626") {
+    const shares = (await client.readContract({
+      address: venue.address, abi: erc4626WriteAbi, functionName: "balanceOf", args: [signer.address],
+    })) as bigint;
+    if (shares === 0n) return 0;
+    const assets = (await client.readContract({
+      address: venue.address,
+      abi: [{ name: "convertToAssets", type: "function", stateMutability: "view", inputs: [{ type: "uint256" }], outputs: [{ type: "uint256" }] }] as const,
+      functionName: "convertToAssets",
+      args: [shares],
+    })) as bigint;
+    return Number(assets) / 1e6;
+  }
+  if (!venue.aToken) return null;
+  const bal = (await client.readContract({
+    address: venue.aToken, abi: erc20Abi, functionName: "balanceOf", args: [signer.address],
+  })) as bigint;
+  return Number(bal) / 1e6;
+}
+
 /** Withdraw everything from the venue back to the wallet as USDC. */
 export async function liveWithdrawAll(
   cfg: Config,

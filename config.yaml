@@ -158,6 +158,8 @@ position:
 # venue degrades. Nothing is predicted.
 allocator:
   capital_usd: 1500
+  max_tier: 2                  # 1=blue-chip only; 2=+solid smaller (Fluid, Spark, Moonwell); 3=+risk markets
+  min_venue_tvl_usd: 5000000   # never park in a venue under $5M TVL
   switch_threshold_pp: 0.75    # alt must beat current by 0.75pp...
   switch_sustain_checks: 5     # ...for 5 consecutive checks (guards vs blips)
   auto_switch: true            # paper: switch automatically; live asks too
@@ -165,6 +167,8 @@ allocator:
   tvl_drain_fraction: 0.30     # alert if TVL 30% under trailing peak
   tvl_window_days: 7
   stall_hours: 48              # alert if on-chain index flat 48h
+  depeg_alert_price: 0.99      # alert if USDC/USD advisory < this
+  auto_flee: true              # LIVE: withdraw to wallet on drain/stall guards
 
 # --- Emission-regime gate ------------------------------------------------
 # 11 months of DefiLlama history show emission carry is volatile + mean-

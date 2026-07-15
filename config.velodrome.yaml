@@ -103,6 +103,8 @@ position:
 # off on this venue — the Base config is where the allocator runs).
 allocator:
   capital_usd: 1500
+  max_tier: 2                  # 1=blue-chip only; 2=+solid smaller (Fluid, Spark, Moonwell); 3=+risk markets
+  min_venue_tvl_usd: 5000000   # never park in a venue under $5M TVL
   switch_threshold_pp: 0.75
   switch_sustain_checks: 5
   auto_switch: false
@@ -110,6 +112,8 @@ allocator:
   tvl_drain_fraction: 0.30
   tvl_window_days: 7
   stall_hours: 48
+  depeg_alert_price: 0.99
+  auto_flee: false
 
 regime:
   enabled: false

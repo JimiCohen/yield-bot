@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import type { ChainClient } from "../chain/client.js";
 import type { Config } from "../config/schema.js";
-import { VENUES, readVenue, fetchAdvisoryRates, impliedAprPct, type Venue } from "./venues.js";
+import { VENUES, readVenue, fetchAdvisoryRates, fetchUsdcPrice, impliedAprPct, type Venue } from "./venues.js";
 
 /**
  * PARK + GUARD paper allocator.
@@ -96,6 +96,8 @@ export interface AllocCycleResult {
   advertisedApy: number | null;
   alerts: string[];
   switched: boolean;
+  /** real wallet position value in this venue (live mode + key only) */
+  liveValueUsd: number | null;
 }
 
 /** One guard cycle: read chain, mark paper value, evaluate guards. */
@@ -108,15 +110,19 @@ export async function runAllocCycle(
   ensureAllocTables(db);
   const A = cfg.allocator;
   const advisory = await fetchAdvisoryRates(VENUES);
+  // Eligibility: risk tier and minimum TVL (advisory TVL; on-chain totalAssets
+  // backs it up per venue below).
+  const eligible = (v: Venue) =>
+    v.tier <= A.max_tier && (advisory[v.key]?.tvlUsd ?? 0) >= A.min_venue_tvl_usd;
 
   let state = getState(db);
   if (!state) {
     // First run: park in the venue with the best advertised BASE apy among
-    // verified venues (one-time use of advisory for the seed decision).
+    // verified + eligible venues (one-time use of advisory for the seed).
     const readings = new Map<string, Awaited<ReturnType<typeof readVenue>>>();
     for (const v of VENUES) readings.set(v.key, await readVenue(client, v));
-    const candidates = VENUES.filter((v) => readings.get(v.key)!.verified);
-    if (candidates.length === 0) throw new Error("no venue passed on-chain verification");
+    const candidates = VENUES.filter((v) => readings.get(v.key)!.verified && eligible(v));
+    if (candidates.length === 0) throw new Error("no venue passed on-chain verification + eligibility");
     const best = candidates.reduce((a, b) =>
       (advisory[b.key]?.apyBase ?? 0) > (advisory[a.key]?.apyBase ?? 0) ? b : a,
     );
@@ -161,19 +167,46 @@ export async function runAllocCycle(
     alerts.push(`ACCRUAL_STALL: ${venue.key} on-chain index flat for >= ${A.stall_hours}h — vault has stopped paying`);
   }
 
-  // G2 TVL_DRAIN — vs trailing max.
+  // G2 TVL_DRAIN — vs trailing max. ON-CHAIN totalAssets first (truth);
+  // advisory only as fallback when the venue can't report TVL on-chain.
   const peak = db
     .prepare("SELECT MAX(tvl_usd) m FROM alloc_snapshots WHERE venue = ? AND ts >= ?")
     .get(venue.key, Date.now() - A.tvl_window_days * 86_400_000) as { m: number | null };
-  const tvlNow = adv?.tvlUsd ?? reading.totalAssetsUsd;
+  const tvlNow = reading.totalAssetsUsd ?? adv?.tvlUsd ?? null;
   if (peak.m && tvlNow !== null && tvlNow < peak.m * (1 - A.tvl_drain_fraction)) {
     alerts.push(`TVL_DRAIN: ${venue.key} TVL $${(tvlNow / 1e6).toFixed(1)}M is ${(100 * (1 - tvlNow / peak.m)).toFixed(0)}% below ${A.tvl_window_days}d peak — possible run`);
+  }
+
+  // G4 USDC_DEPEG — advisory price check (fail-open on API failure).
+  const usdcPrice = await fetchUsdcPrice();
+  if (usdcPrice !== null && usdcPrice < A.depeg_alert_price) {
+    alerts.push(`USDC_DEPEG: USDC at $${usdcPrice.toFixed(4)} < ${A.depeg_alert_price} — all venues exposed; consider exiting to fiat rails`);
+  }
+
+  // G5 YIELD_DIVERGENCE — measured (on-chain) trailing APR far below advertised
+  // means the advertised number is stale/wrong or the vault quietly degraded.
+  const trail = db
+    .prepare(
+      "SELECT onchain_index, ts FROM alloc_snapshots WHERE venue = ? AND ts <= ? ORDER BY ts DESC LIMIT 1",
+    )
+    .get(venue.key, Date.now() - 24 * 3_600_000) as { onchain_index: string; ts: number } | undefined;
+  if (trail && adv && adv.apyBase > 1) {
+    const measured24h = impliedAprPct(
+      { index: BigInt(trail.onchain_index), ts: trail.ts },
+      { index: reading.index, ts: Date.now() },
+    );
+    if (measured24h !== null && measured24h < adv.apyBase * 0.4) {
+      alerts.push(
+        `YIELD_DIVERGENCE: ${venue.key} measured ${measured24h.toFixed(2)}%/yr (24h, on-chain) vs advertised ${adv.apyBase.toFixed(2)}% — advertised is not being delivered`,
+      );
+    }
   }
 
   // G1 BETTER_VENUE — advertised spread sustained across checks.
   if (adv) {
     for (const alt of VENUES) {
       if (alt.key === venue.key) continue;
+      if (!eligible(alt)) continue; // never switch into an ineligible venue
       const a = advisory[alt.key];
       if (!a) continue;
       const spread = a.apyBase - adv.apyBase;
@@ -198,8 +231,29 @@ export async function runAllocCycle(
       }
     }
   }
+  // --- LIVE-position awareness + auto-flee -------------------------------
+  // When a real deposit exists (key present, live mode), the guard watches
+  // the REAL position too — and on danger guards (drain/stall) can flee to
+  // the wallet automatically. Paper-only runs skip this entirely.
+  let liveValueUsd: number | null = null;
+  if (cfg.mode === "live" && process.env[cfg.wallet.private_key_env]) {
+    try {
+      const { readLivePositionUsd, liveWithdrawAll } = await import("./live.js");
+      liveValueUsd = await readLivePositionUsd(cfg, client, venue);
+      const danger = alerts.some((a) => a.startsWith("ACCRUAL_STALL") || a.startsWith("TVL_DRAIN"));
+      if (liveValueUsd !== null && liveValueUsd > 1 && danger && A.auto_flee) {
+        log(`AUTO-FLEE: danger guard fired with $${liveValueUsd.toFixed(2)} live in ${venue.key} — withdrawing to wallet`);
+        const hash = await liveWithdrawAll(cfg, client, venue, log);
+        event(db, "FLEE", `${venue.key} $${liveValueUsd.toFixed(2)} -> wallet (${hash})`);
+        alerts.push(`FLED ${venue.key}: live funds withdrawn to wallet (${hash})`);
+      }
+    } catch (e) {
+      log(`live-awareness check failed (${e instanceof Error ? e.message : e}) — paper guard unaffected`);
+    }
+  }
+
   for (const a of alerts) event(db, "ALERT", a);
   saveState(db, state);
 
-  return { venue, valueUsd, pnlUsd: valueUsd - A.capital_usd, impliedAprPct: implied, advertisedApy: adv?.apyBase ?? null, alerts, switched };
+  return { venue, valueUsd, pnlUsd: valueUsd - A.capital_usd, impliedAprPct: implied, advertisedApy: adv?.apyBase ?? null, alerts, switched, liveValueUsd };
 }

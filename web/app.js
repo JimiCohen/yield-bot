@@ -263,9 +263,28 @@ function attachLogs(task = "paper") {
 }
 
 // ---- boot ----
+// ---- honest yield (PARK+GUARD allocator) ----
+async function refreshAllocator() {
+  const a = await get("/api/allocator");
+  const block = $("#alloc-block");
+  if (!a || !a.active) { block.hidden = true; return; }
+  block.hidden = false;
+  const apr = a.measuredApr24h ?? a.measuredApr7d;
+  const perYear = apr != null ? (a.capitalUsd * apr) / 100 : null;
+  $("#alloc-card").innerHTML = `<div class="opp best">
+    <div class="opp-pair">${a.venue} <span class="muted tiny">audited vault · USDC</span></div>
+    <div class="opp-apr pos">${apr != null ? apr.toFixed(2) + "%" : "…"} <small>measured on-chain</small></div>
+    <div class="opp-line"><span class="muted">Parked</span><span class="v">${fmt$(a.capitalUsd)} (paper)</span></div>
+    <div class="opp-line"><span class="muted">Earned so far</span><span class="v">${a.pnlUsd != null ? (a.pnlUsd >= 0 ? "+$" : "-$") + Math.abs(a.pnlUsd).toFixed(4) : "—"}</span></div>
+    <div class="opp-line"><span class="muted">Pace</span><span class="v">${perYear != null ? "$" + (perYear / 365).toFixed(2) + "/day · $" + perYear.toFixed(0) + "/yr" : "—"}</span></div>
+    <div class="opp-line"><span class="muted">Real-money gate</span><span class="v">${a.gateOpen ? "✅ open" : "opens in " + Math.max(0, 7 - a.spanDays).toFixed(1) + "d"}</span></div>
+    <div class="opp-line"><span class="muted">Advertised</span><span class="v">${a.advertisedApy != null ? a.advertisedApy.toFixed(2) + "%" : "—"}</span></div>
+  </div>`;
+}
+
 function refreshAll() {
   const q = (p) => p.catch(() => {});
-  q(refreshStatus()); q(refreshOpps()); q(refreshPositions()); q(refreshForecast()); q(refreshLab()); q(refreshAdvanced());
+  q(refreshStatus()); q(refreshOpps()); q(refreshPositions()); q(refreshForecast()); q(refreshLab()); q(refreshAdvanced()); q(refreshAllocator());
 }
 refreshAll();
 attachLogs();
